@@ -80,8 +80,14 @@ def test_time_feature_selection_includes_only_available_columns() -> None:
     frame = add_time_features(pd.DataFrame({"SETTLEMENTDATE": ["2026-05-02 12:30:00"]}))
     frame["temperature_2m"] = 21.5
     frame["TOTALCLEARED"] = 42
+    frame["target_constrained"] = 1
+    frame["target_constrained_next_6h"] = 1
+    frame["binding_constraint_ids"] = "C1"
 
     assert "is_weekend" in frame.columns
     assert frame.loc[0, "is_weekend"] == 1
     assert "TOTALCLEARED" not in select_feature_columns(frame)
     assert "TOTALCLEARED" in select_feature_columns(frame, include_dispatch_features=True)
+    assert "target_constrained" not in select_feature_columns(frame, include_dispatch_features=True)
+    assert "target_constrained_next_6h" not in select_feature_columns(frame, include_dispatch_features=True)
+    assert "binding_constraint_ids" not in select_feature_columns(frame, include_dispatch_features=True)

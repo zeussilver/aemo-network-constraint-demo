@@ -29,6 +29,14 @@ def _write_model(path: Path) -> Path:
             "planned_genconset": pd.DataFrame(),
             "planned_genconsetinvoke": pd.DataFrame(),
             "no_weather": True,
+            "horizon_hours": 6,
+            "target_column": "target_constrained_next_6h",
+            "metrics": {
+                "model_type": "constant_probability_baseline",
+                "horizon_hours": 6,
+                "target_column": "target_constrained_next_6h",
+                "positive_rate": 0.1,
+            },
         },
         path,
     )
@@ -57,8 +65,13 @@ def test_forecast_endpoint_returns_forecast_rows(tmp_path: Path) -> None:
     payload = response.json()
     assert payload["duid"] == "D1"
     assert payload["connection_point"] == "CP1"
+    assert payload["horizon_hours"] == 1
+    assert payload["model"]["horizon_hours"] == 6
+    assert payload["model"]["target_column"] == "target_constrained_next_6h"
     assert len(payload["forecast"]) == 12
+    assert payload["forecast"][0]["probability"] == 0.61
     assert payload["forecast"][0]["ml_constraint_probability"] == 0.61
+    assert payload["forecast"][0]["risk_level"] == "high"
 
 
 def test_forecast_endpoint_reports_missing_model(tmp_path: Path) -> None:

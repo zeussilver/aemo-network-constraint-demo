@@ -31,7 +31,8 @@ def forecast_duid(
             status_code=404,
             detail=(
                 f"Model file not found: {model_path}. Train first, for example: "
-                "python -m src.aemo_constraint_demo.train --duid OAKEY1SF --lat -27.43 --lon 151.72"
+                "python -m src.aemo_constraint_demo.train --duid CATHROCK --days 60 "
+                "--horizon-hours 6 --model-out artifacts/cathrock_6h.joblib"
             ),
         )
     try:

@@ -28,6 +28,17 @@ def future_intervals(horizon_hours: int, start: str | None = None, timezone: str
     return pd.DataFrame({"SETTLEMENTDATE": pd.date_range(start=start_ts, periods=periods, freq="5min")})
 
 
+def risk_level(probability: float) -> str:
+    """Map a probability to a compact demo risk band."""
+    if probability >= 0.5:
+        return "high"
+    if probability >= 0.2:
+        return "medium"
+    if probability >= 0.05:
+        return "low"
+    return "very_low"
+
+
 def _market_period_to_timestamp(market_date, period) -> pd.Timestamp | None:
     if pd.isna(market_date) or pd.isna(period):
         return None
@@ -123,24 +134,43 @@ def forecast_from_bundle(
     rows = []
     for ts, prob in zip(intervals["SETTLEMENTDATE"], scores, strict=False):
         ts = pd.Timestamp(ts)
+        probability = round(float(prob), 4)
         planned_constraints = planned.get(ts, [])
         rows.append(
             {
+                "interval_start": ts.isoformat(),
                 "settlementdate": ts.isoformat(),
                 "duid": trained_duid,
-                "ml_constraint_probability": round(float(prob), 4),
+                "probability": probability,
+                "ml_constraint_probability": probability,
                 "ml_predicted_constrained": bool(prob >= 0.5),
+                "risk_level": risk_level(float(prob)),
+                "planned_constraints": planned_constraints,
                 "aemo_planned_relevant_constraints": planned_constraints,
             }
         )
 
+    metrics = bundle.get("metrics", {})
+    model_metadata = {
+        "model_type": metrics.get("model_type"),
+        "target_column": bundle.get("target_column", metrics.get("target_column")),
+        "horizon_hours": bundle.get("horizon_hours", metrics.get("horizon_hours")),
+        "positive_rate": metrics.get("positive_rate"),
+        "average_precision": metrics.get("average_precision", metrics.get("test_average_precision")),
+        "roc_auc": metrics.get("roc_auc", metrics.get("test_roc_auc")),
+        "trained_at_utc": bundle.get("trained_at_utc"),
+    }
+    relevant = list(bundle.get("relevant_genconids", []))
     return {
         "duid": trained_duid,
         "connection_point": bundle.get("connection_point"),
         "horizon_hours": horizon_hours,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "model_trained_at_utc": bundle.get("trained_at_utc"),
-        "model_metrics": bundle.get("metrics", {}),
-        "relevant_genconids_count": len(bundle.get("relevant_genconids", [])),
+        "model": model_metadata,
+        "model_metrics": metrics,
+        "relevant_genconids": relevant,
+        "relevant_genconids_count": len(relevant),
+        "planned_constraints_source": "GENCONSETINVOKE relevant-set proxy when available",
         "forecast": rows,
     }

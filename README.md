@@ -27,6 +27,7 @@ This demo implements a minimum viable version:
 3. **Historical label construction**
    - Uses `DISPATCHCONSTRAINT` rows for relevant `GENCONID`s.
    - Defines the target as `1` when any relevant constraint is binding or violating at a dispatch interval.
+   - Phase 2 trains against a future-only horizon label for the selected DUID.
 
 4. **ML forecast model**
    - Features: time-of-day, day-of-week, month, weekend flag, and weather.
@@ -72,6 +73,17 @@ if any relevant GENCONID has MARGINALVALUE > 0 or VIOLATIONDEGREE > 0 in DISPATC
 else 0
 ```
 
+For a forecast horizon `H`, Phase 2 uses:
+
+```text
+target_constrained_next_Hh(t, DUID) = 1
+if target_constrained is 1 in any future dispatch interval from t+1 through t+H
+else 0
+```
+
+The current interval is excluded from the horizon label. Training drops the final incomplete horizon window instead of
+turning unknown future intervals into false negatives.
+
 This is intentionally simple and auditable. The real production version should refine the definition using AEMO constraint taxonomy, outage context, P5MIN/Predispatch constraint solution data, and domain-specific rules for network-vs-system constraints.
 
 ---
@@ -113,43 +125,44 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Train a small demo model
-
-Example using Oakey Solar Farm coordinates:
+### 2. Train the Phase 2 demo model
 
 ```bash
 python -m src.aemo_constraint_demo.train \
-  --duid OAKEY1SF \
-  --lat -27.43 \
-  --lon 151.72 \
-  --days 14 \
-  --model-out artifacts/oakey1sf.joblib
+  --duid CATHROCK \
+  --days 60 \
+  --horizon-hours 6 \
+  --model-out artifacts/cathrock_6h.joblib
 ```
 
-For a faster smoke test, reduce `--days` to `7`. For a more stable result, use `21` to `45` days.
+`CATHROCK` coordinates are read from `data/duid_coordinates.csv`. You can override them with `--lat` and `--lon`.
+For a faster smoke test, reduce `--days`, or add `--no-weather` to skip Open-Meteo.
 
 The script prints a JSON summary like:
 
 ```json
 {
-  "model_out": "artifacts/oakey1sf.joblib",
-  "duid": "OAKEY1SF",
-  "connection_point": "...",
-  "relevant_genconids_count": 12,
+  "model_out": "artifacts/cathrock_6h.joblib",
+  "metrics_out": "artifacts/cathrock_6h_metrics.json",
+  "duid": "CATHROCK",
+  "connection_point": "SCRK",
+  "horizon_hours": 6,
+  "target_column": "target_constrained_next_6h",
+  "relevant_genconids_count": 103,
   "feature_columns": ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "temperature_2m"],
   "metrics": {
-    "rows": 4032,
-    "positive_rate": 0.04,
-    "test_average_precision": 0.18,
-    "test_roc_auc": 0.71
+    "model_type": "balanced_logistic_regression",
+    "total_samples": 17208,
+    "positive_rate": 0.013249651324965132,
+    "average_precision": null,
+    "roc_auc": null
   }
 }
 ```
 
 The exact metrics depend on the chosen DUID, date window, and current NEMWeb rolling files.
-If the selected DUID has no constrained intervals in the chronological training window, the script saves a
-`constant_probability_baseline` model instead of failing, and reports `test_average_precision`/`test_roc_auc` as
-`null` when the held-out set also contains only one target class.
+If the training split has one target class, the script saves a `constant_probability_baseline` model instead of failing.
+If the held-out set has one target class, `average_precision` and `roc_auc` are recorded as `null`.
 
 ### Phase 1: Target Discovery
 
@@ -197,8 +210,44 @@ python scripts/find_constrained_duids.py \
 
 The scan writes one row per `DUID`/window/horizon. Pick the best model-training target from the ranked top CSV by
 preferring rows where `recommended` is true, then higher `positive_intervals`, practical `positive_rate`, and recent
-`last_positive_dispatch_interval`. Phase 2 should train against the selected horizon label after the training CLI
-supports `--horizon-hours`.
+`last_positive_dispatch_interval`. Phase 2 trains against the selected horizon label with `--horizon-hours`.
+
+### Phase 2: Horizon-Based ML Training
+
+Phase 2 target:
+
+```text
+DUID: CATHROCK
+connection_point_id: SCRK
+days: 60
+horizon_hours: 6
+target: target_constrained_next_6h
+```
+
+The selected run generated:
+
+```text
+model_type: balanced_logistic_regression
+total_samples: 17208
+train_samples: 13766
+test_samples: 3442
+positive_rate: 0.013249651324965132
+train_positive_rate: 0.016562545401714368
+test_positive_rate: 0.0
+average_precision: null
+roc_auc: null
+precision_at_top_5_percent: 0.0
+```
+
+The model is non-baseline. The chronological test window has no positive horizon events, so AP and ROC AUC are
+reported as `null` rather than fabricated.
+
+Metrics and response artifacts:
+
+```text
+artifacts/cathrock_6h_metrics.json
+artifacts/example_cathrock_6h_response.json
+```
 
 ### 3. Run tests
 
@@ -226,23 +275,31 @@ uvicorn app:app --reload
 Query:
 
 ```bash
-curl "http://127.0.0.1:8000/forecast/OAKEY1SF?horizon_hours=24&model_path=artifacts/oakey1sf.joblib"
+curl "http://127.0.0.1:8000/forecast/CATHROCK?horizon_hours=6&model_path=artifacts/cathrock_6h.joblib"
 ```
 
 Example response shape:
 
 ```json
 {
-  "duid": "OAKEY1SF",
-  "connection_point": "...",
-  "horizon_hours": 24,
-  "relevant_genconids_count": 12,
+  "duid": "CATHROCK",
+  "connection_point": "SCRK",
+  "horizon_hours": 6,
+  "model": {
+    "model_type": "balanced_logistic_regression",
+    "target_column": "target_constrained_next_6h",
+    "positive_rate": 0.013249651324965132
+  },
+  "relevant_genconids_count": 103,
   "forecast": [
     {
-      "settlementdate": "2026-05-20T08:00:00",
-      "duid": "OAKEY1SF",
-      "ml_constraint_probability": 0.3412,
+      "interval_start": "2026-05-20T00:00:00",
+      "duid": "CATHROCK",
+      "probability": 0.0124,
+      "ml_constraint_probability": 0.0124,
       "ml_predicted_constrained": false,
+      "risk_level": "very_low",
+      "planned_constraints": [],
       "aemo_planned_relevant_constraints": []
     }
   ]
@@ -306,8 +363,9 @@ For a stronger production version, add:
 1. **Network-vs-system classification is simplified.**  
    This demo treats DUID-relevant generic constraints as the target class. A production build should classify network constraints more carefully.
 
-2. **Weather coordinates are manual.**  
-   Pass `--lat` and `--lon` for the DUID. Production should maintain a DUID/station geospatial lookup.
+2. **Geospatial metadata is tiny.**
+   Phase 2 includes a vetted `CATHROCK` row in `data/duid_coordinates.csv`; production should maintain a complete
+   DUID/station geospatial lookup.
 
 3. **One model per DUID.**  
    The service is intentionally narrow. Multi-DUID modelling would use a shared feature store and add DUID embeddings or categorical features.

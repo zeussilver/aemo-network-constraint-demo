@@ -1,0 +1,73 @@
+{
+  "duid": "CATHROCK",
+  "days": 60,
+  "horizon_hours": 6,
+  "target_column": "target_constrained_next_6h",
+  "connection_point_id": "SCRK",
+  "relevant_genconid_count": 103,
+  "model_type": "balanced_logistic_regression",
+  "total_samples": 17208,
+  "train_samples": 13766,
+  "test_samples": 3442,
+  "positive_rate": 0.013249651324965132,
+  "train_positive_rate": 0.016562545401714368,
+  "test_positive_rate": 0.0,
+  "average_precision": null,
+  "roc_auc": null,
+  "precision_at_top_5_percent": 0.0,
+  "features": [
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "month_sin",
+    "month_cos",
+    "is_weekend",
+    "temperature_2m",
+    "relative_humidity_2m",
+    "dew_point_2m",
+    "wind_speed_10m",
+    "wind_speed_100m",
+    "wind_direction_10m",
+    "shortwave_radiation"
+  ],
+  "trained_at": "2026-05-19T12:48:30.323155+00:00",
+  "dropped_incomplete_horizon_rows": 72,
+  "coordinate_source": {
+    "source": "AEMO ELI identifies CATHROCK as Cathedral Rocks; Global Energy Monitor and The Wind Power list WGS84 coordinates",
+    "notes": "Coordinate sources: https://www.gem.wiki/Cathedral_Rocks_wind_farm and https://www.thewindpower.net/windfarm_en_2676_cathedral-rocks.php",
+    "coordinate_file": "data/duid_coordinates.csv"
+  },
+  "rows": 17208,
+  "train_rows": 13766,
+  "test_rows": 3442,
+  "test_average_precision": null,
+  "test_roc_auc": null,
+  "classification_report": {
+    "0": {
+      "precision": 1.0,
+      "recall": 0.9825682742591516,
+      "f1-score": 0.9912075029308324,
+      "support": 3442.0
+    },
+    "1": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 0.0
+    },
+    "accuracy": 0.9825682742591516,
+    "macro avg": {
+      "precision": 0.5,
+      "recall": 0.4912841371295758,
+      "f1-score": 0.4956037514654162,
+      "support": 3442.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 0.9825682742591516,
+      "f1-score": 0.9912075029308324,
+      "support": 3442.0
+    }
+  }
+}

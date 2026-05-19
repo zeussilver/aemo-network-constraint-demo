@@ -80,6 +80,8 @@ def test_forecast_from_bundle_returns_probability_rows(tmp_path: Path) -> None:
             "planned_genconsetinvoke": pd.DataFrame(),
             "metrics": {"rows": 10},
             "trained_at_utc": "2026-05-01T00:00:00+00:00",
+            "horizon_hours": 1,
+            "target_column": "target_constrained_next_1h",
             "no_weather": True,
         },
         model_path,
@@ -88,9 +90,12 @@ def test_forecast_from_bundle_returns_probability_rows(tmp_path: Path) -> None:
     result = forecast_from_bundle(model_path, duid="d1", horizon_hours=1, start="2026-05-01 08:00:00")
 
     assert result["duid"] == "D1"
+    assert result["model"]["target_column"] == "target_constrained_next_1h"
     assert len(result["forecast"]) == 12
+    assert result["forecast"][0]["probability"] == 0.73
     assert result["forecast"][0]["ml_constraint_probability"] == 0.73
     assert result["forecast"][0]["ml_predicted_constrained"] is True
+    assert result["forecast"][0]["risk_level"] == "high"
 
 
 def test_forecast_from_bundle_rejects_wrong_duid(tmp_path: Path) -> None:
