@@ -23,7 +23,7 @@ Implement Phase 2: train a horizon-based ML model for `CATHROCK`, `60` days, `6`
 - `README.md`
 - `artifacts/cathrock_6h_metrics.json`
 - `artifacts/example_cathrock_6h_response.json`
-- `chatref/phase2/phase2_horizon_training_report.md`
+- `chatref/phase2_horizon_training_report.md`
 
 Generated but ignored by Git in `artifacts/`:
 
@@ -195,29 +195,17 @@ The response includes:
 - per-interval risk levels
 - planned relevant constraint list where available
 
-## Handoff Folder
+## Handoff Files
 
-Collected files under `chatref/phase2/`:
+The repo itself is the Phase 2 implementation state. The redundant `chatref/phase2/` copy folder has been removed.
+Keep only these handoff files/paths:
 
-- `phase2_horizon_training_report.md`
-- `cathrock_6h.joblib`
-- `cathrock_6h_metrics.json`
-- `example_cathrock_6h_response.json`
+- `chatref/phase2_horizon_training_report.md`
+- `artifacts/cathrock_6h_metrics.json`
+- `artifacts/example_cathrock_6h_response.json`
 - `README.md`
+- `src/aemo_constraint_demo/train.py`
 - `app.py`
-- `train.py`
-- `forecast.py`
-- `scan.py`
-- `duid_coordinates.csv`
-- `duid_constraint_scan_expanded_top.csv`
-- `test_train.py`
-- `test_api.py`
-- `test_features.py`
-- `test_forecast.py`
-- `test_scan.py`
-- `pytest.ini`
-- `phase2.md`
-- `phase2_execution_plan.md`
 
 ## Coordinate Source
 
@@ -230,7 +218,6 @@ Collected files under `chatref/phase2/`:
 
 - Logistic regression emitted sklearn numerical runtime warnings during fitting, but training completed and produced a usable probability model.
 - The chronological held-out window has no positive horizon labels, so AP and ROC AUC are undefined for this split.
-- `chatref/phase2` contains copied test files for handoff. `pytest.ini` now restricts test discovery to `tests/` so the copies do not collide with the working test modules.
 - `data/cache` is about `974M` after training and is excluded from Git/handoff packaging.
 
 ## GitHub Polish Readiness
@@ -254,4 +241,4 @@ backtest shows time/weather-only ranking is weak.
 - API can load the horizon-trained artifact: `pass`
 - `python -m pytest -q` passes: `pass`
 - Model is non-baseline: `pass`
-- Handoff files collected under `chatref/phase2`: `pass`
+- Redundant `chatref/phase2/` copied handoff folder removed: `pass`
