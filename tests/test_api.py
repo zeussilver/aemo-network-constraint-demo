@@ -58,20 +58,48 @@ def test_forecast_endpoint_returns_forecast_rows(tmp_path: Path) -> None:
 
     response = client.get(
         "/forecast/D1",
-        params={"horizon_hours": 1, "model_path": str(model_path), "start": "2026-05-01 08:00:00"},
+        params={"horizon_hours": 6, "model_path": str(model_path), "start": "2026-05-01 08:00:00"},
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["duid"] == "D1"
     assert payload["connection_point"] == "CP1"
-    assert payload["horizon_hours"] == 1
+    assert payload["horizon_hours"] == 6
     assert payload["model"]["horizon_hours"] == 6
     assert payload["model"]["target_column"] == "target_constrained_next_6h"
-    assert len(payload["forecast"]) == 12
+    assert len(payload["forecast"]) == 72
     assert payload["forecast"][0]["probability"] == 0.61
     assert payload["forecast"][0]["ml_constraint_probability"] == 0.61
     assert payload["forecast"][0]["risk_level"] == "high"
+
+
+def test_forecast_endpoint_infers_model_horizon_when_omitted(tmp_path: Path) -> None:
+    client = TestClient(app)
+    model_path = _write_model(tmp_path / "model.joblib")
+
+    response = client.get(
+        "/forecast/D1",
+        params={"model_path": str(model_path), "start": "2026-05-01 08:00:00"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["horizon_hours"] == 6
+    assert len(payload["forecast"]) == 72
+
+
+def test_forecast_endpoint_rejects_mismatched_horizon(tmp_path: Path) -> None:
+    client = TestClient(app)
+    model_path = _write_model(tmp_path / "model.joblib")
+
+    response = client.get(
+        "/forecast/D1",
+        params={"horizon_hours": 1, "model_path": str(model_path), "start": "2026-05-01 08:00:00"},
+    )
+
+    assert response.status_code == 400
+    assert "does not match model bundle horizon_hours=6" in response.json()["detail"]
 
 
 def test_forecast_endpoint_reports_missing_model(tmp_path: Path) -> None:

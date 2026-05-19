@@ -12,17 +12,19 @@ def test_notebook_is_cleared_and_contains_core_workflow_sections() -> None:
     text = "\n".join("".join(cell.get("source", [])) for cell in notebook["cells"])
 
     for heading in [
-        "## 1. Download standing-data tables",
-        "## 2. Map DUID",
-        "## 3. Download recent Next Day Dispatch files",
-        "## 4. Build labels",
-        "## 7. Train baseline model",
-        "## 9. Query example",
+        "## 1. Target discovery summary",
+        "## 2. Map DUID -> connection point -> GENCONID",
+        "## 3. Horizon label definition",
+        "## 4. Training command",
+        "## 6. Event-window backtest summary",
+        "## 7. API query examples",
+        "## 8. Limitations",
     ]:
         assert heading in text
 
     assert 'read_monthly_table("GENCONSET"' in text
-    assert '"planned_genconset": relevant_gset' in text
+    assert "target_constrained_next_6h" in text
+    assert "backtest_horizon_model.py" in text
 
     for cell in notebook["cells"]:
         if cell["cell_type"] == "code":
@@ -35,6 +37,8 @@ def test_readme_documents_run_method_tests_limitations_and_extensions() -> None:
 
     for expected in [
         "python -m pytest",
+        "scripts/backtest_horizon_model.py",
+        "Phase 2.5",
         "uvicorn app:app --reload",
         "DUID -> CONNECTIONPOINTID -> GENCONID",
         "## Known limitations",

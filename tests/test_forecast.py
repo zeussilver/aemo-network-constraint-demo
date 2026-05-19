@@ -98,6 +98,53 @@ def test_forecast_from_bundle_returns_probability_rows(tmp_path: Path) -> None:
     assert result["forecast"][0]["risk_level"] == "high"
 
 
+def test_forecast_from_bundle_infers_model_horizon_when_omitted(tmp_path: Path) -> None:
+    model_path = tmp_path / "model.joblib"
+    joblib.dump(
+        {
+            "model": ConstantProbabilityModel(0.42),
+            "feature_columns": ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "month_sin", "month_cos", "is_weekend"],
+            "duid": "D1",
+            "connection_point": "CP1",
+            "latitude": -27.4,
+            "longitude": 151.7,
+            "relevant_genconids": ["C1"],
+            "planned_genconset": pd.DataFrame(),
+            "planned_genconsetinvoke": pd.DataFrame(),
+            "metrics": {},
+            "horizon_hours": 2,
+            "target_column": "target_constrained_next_2h",
+            "no_weather": True,
+        },
+        model_path,
+    )
+
+    result = forecast_from_bundle(model_path, duid="D1", start="2026-05-01 08:00:00")
+
+    assert result["horizon_hours"] == 2
+    assert len(result["forecast"]) == 24
+
+
+def test_forecast_from_bundle_rejects_mismatched_horizon(tmp_path: Path) -> None:
+    model_path = tmp_path / "model.joblib"
+    joblib.dump(
+        {
+            "model": ConstantProbabilityModel(0.42),
+            "feature_columns": ["hour_sin"],
+            "duid": "D1",
+            "latitude": 0,
+            "longitude": 0,
+            "relevant_genconids": [],
+            "no_weather": True,
+            "horizon_hours": 6,
+        },
+        model_path,
+    )
+
+    with pytest.raises(ValueError, match="does not match model bundle horizon_hours=6"):
+        forecast_from_bundle(model_path, duid="D1", horizon_hours=1, start="2026-05-01 08:00:00")
+
+
 def test_forecast_from_bundle_rejects_wrong_duid(tmp_path: Path) -> None:
     model_path = tmp_path / "model.joblib"
     joblib.dump(

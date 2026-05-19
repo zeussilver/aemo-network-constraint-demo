@@ -21,7 +21,7 @@ def health() -> dict:
 @app.get("/forecast/{duid}")
 def forecast_duid(
     duid: str,
-    horizon_hours: int = Query(default=24, ge=1, le=72),
+    horizon_hours: int | None = Query(default=None, ge=1, le=72),
     model_path: str = Query(default="artifacts/model.joblib"),
     start: str | None = Query(default=None, description="Optional start timestamp, e.g. 2026-05-20 08:00"),
 ) -> dict:

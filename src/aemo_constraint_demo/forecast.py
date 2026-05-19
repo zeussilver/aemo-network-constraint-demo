@@ -103,7 +103,7 @@ def planned_constraints_for_intervals(bundle: dict, intervals: pd.DataFrame) -> 
 def forecast_from_bundle(
     model_path: str | Path,
     duid: str | None = None,
-    horizon_hours: int = 24,
+    horizon_hours: int | None = None,
     start: str | None = None,
     timezone: str = "Australia/Melbourne",
 ) -> dict:
@@ -115,10 +115,22 @@ def forecast_from_bundle(
             "Retrain with python -m src.aemo_constraint_demo.train for the requested DUID."
         )
 
-    intervals = future_intervals(horizon_hours=horizon_hours, start=start, timezone=timezone)
+    bundle_horizon = bundle.get("horizon_hours", bundle.get("metrics", {}).get("horizon_hours"))
+    if bundle_horizon is not None:
+        bundle_horizon = int(bundle_horizon)
+    resolved_horizon = int(horizon_hours) if horizon_hours is not None else (bundle_horizon or 24)
+    if resolved_horizon <= 0:
+        raise ValueError("horizon_hours must be positive.")
+    if bundle_horizon is not None and horizon_hours is not None and resolved_horizon != bundle_horizon:
+        raise ValueError(
+            f"Requested horizon_hours={resolved_horizon} does not match model bundle horizon_hours={bundle_horizon}. "
+            "Omit horizon_hours to use the model horizon, or train a matching model bundle."
+        )
+
+    intervals = future_intervals(horizon_hours=resolved_horizon, start=start, timezone=timezone)
     features = add_time_features(intervals)
     if not bundle.get("no_weather", False):
-        forecast_days = max(1, min(16, int(horizon_hours / 24) + 2))
+        forecast_days = max(1, min(16, int(resolved_horizon / 24) + 2))
         weather = fetch_open_meteo_forecast(bundle["latitude"], bundle["longitude"], forecast_days=forecast_days, timezone=timezone)
         features = merge_weather_to_intervals(features, weather)
 
@@ -164,7 +176,7 @@ def forecast_from_bundle(
     return {
         "duid": trained_duid,
         "connection_point": bundle.get("connection_point"),
-        "horizon_hours": horizon_hours,
+        "horizon_hours": resolved_horizon,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "model_trained_at_utc": bundle.get("trained_at_utc"),
         "model": model_metadata,

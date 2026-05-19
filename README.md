@@ -97,9 +97,13 @@ This is intentionally simple and auditable. The real production version should r
 ├── app.py
 ├── notebooks/
 │   └── aemo_constraint_forecast_demo.ipynb
+├── scripts/
+│   ├── backtest_horizon_model.py
+│   └── find_constrained_duids.py
 ├── tests/
 │   ├── test_aemo_client.py
 │   ├── test_api.py
+│   ├── test_backtest.py
 │   ├── test_features.py
 │   ├── test_forecast.py
 │   ├── test_notebook_readme.py
@@ -273,6 +277,49 @@ artifacts/cathrock_6h_metrics.json
 artifacts/example_cathrock_6h_response.json
 ```
 
+### Phase 2.5: Evaluation hardening
+
+Phase 2.5 keeps the model story honest: this is a forecasting workflow demo, not a production-accurate constraint
+forecaster. The normal chronological holdout contains no positive `CATHROCK` 6h horizon events, so AP and ROC AUC are
+`null`. To still test ranking behavior around rare events, the repo includes event-window backtesting where each fold
+trains only on rows strictly before the validation window.
+
+Run:
+
+```bash
+python scripts/backtest_horizon_model.py \
+  --duid CATHROCK \
+  --days 60 \
+  --horizon-hours 6 \
+  --model-out artifacts/cathrock_6h.joblib \
+  --out artifacts/cathrock_6h_backtest_summary.json \
+  --folds-out artifacts/cathrock_6h_backtest_folds.csv \
+  --max-folds 5
+```
+
+Observed Phase 2.5 backtest summary:
+
+```text
+evaluated_folds: 2
+skipped_folds: 1
+mean_average_precision: 0.4292536031939571
+mean_roc_auc: 0.5348134028244604
+mean_precision_at_top_5_percent: 0.43333333333333335
+mean_lift_at_top_5_percent: 0.8856345408976989
+```
+
+These metrics should not be described as strong model performance. They show that the pipeline can be evaluated without
+future leakage and that some event-window ranking signal exists, while top-5% lift below 1.0 means the model is not
+consistently concentrating the rare positive intervals.
+
+Backtest artifacts:
+
+```text
+artifacts/cathrock_6h_backtest_summary.json
+artifacts/cathrock_6h_backtest_folds.csv
+artifacts/example_cathrock_6h_backtest_response.json
+```
+
 ### 3. Run tests
 
 The test suite is offline and uses synthetic AEMO-style ZIP payloads, mocked HTTP calls, and small in-memory training data.
@@ -288,6 +335,7 @@ Coverage focus:
 - `DUID -> CONNECTIONPOINTID -> GENCONID` mapping and label construction;
 - weather merge helpers;
 - baseline ML training bundle creation;
+- event-window backtest fold selection and safe rare-event metrics;
 - forecast helper logic and FastAPI response/error paths.
 
 ### 4. Run query service
@@ -299,8 +347,19 @@ uvicorn app:app --reload
 Query:
 
 ```bash
+curl "http://127.0.0.1:8000/forecast/CATHROCK?model_path=artifacts/cathrock_6h.joblib"
+```
+
+The API infers `horizon_hours=6` from the model bundle when the query parameter is omitted.
+
+Explicit horizon also works:
+
+```bash
 curl "http://127.0.0.1:8000/forecast/CATHROCK?horizon_hours=6&model_path=artifacts/cathrock_6h.joblib"
 ```
+
+If an explicit horizon mismatches the model bundle, the API returns a clear `400` error instead of silently serving the
+wrong horizon.
 
 Example response shape:
 
@@ -342,14 +401,13 @@ jupyter notebook notebooks/aemo_constraint_forecast_demo.ipynb
 
 The notebook walks through:
 
-1. Standing-data downloads.
+1. Target discovery and why `CATHROCK` was selected.
 2. `DUID -> CONNECTIONPOINTID -> GENCONID` mapping.
-3. Next Day Dispatch parsing.
-4. Label construction.
-5. Weather merge.
-6. Chronological train/test split.
-7. Model training and metric interpretation.
-8. API query example.
+3. Future-only `target_constrained_next_6h` label definition.
+4. Training command and model metrics.
+5. Event-window backtest summary.
+6. API query examples with inferred and explicit horizon.
+7. Limitations.
 
 ---
 
@@ -399,6 +457,10 @@ For a stronger production version, add:
 
 5. **Forecast features are minimal.**  
    Default query-time features are time and weather. Production should add AEMO forecast demand, regional/interconnector forecasts, UIGF, outage schedules, and P5MIN/Predispatch inputs.
+
+6. **Evaluation remains sparse-event limited.**
+   The chronological holdout has no positive `CATHROCK` 6h labels. Event-window folds are a transparent supplement, not
+   proof of production-grade predictive accuracy.
 
 ---
 
