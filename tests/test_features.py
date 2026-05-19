@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from src.aemo_constraint_demo.features import (
+    add_lag_features,
     add_time_features,
     build_label_frame,
     relevant_constraints_for_duid,
@@ -91,3 +92,45 @@ def test_time_feature_selection_includes_only_available_columns() -> None:
     assert "target_constrained" not in select_feature_columns(frame, include_dispatch_features=True)
     assert "target_constrained_next_6h" not in select_feature_columns(frame, include_dispatch_features=True)
     assert "binding_constraint_ids" not in select_feature_columns(frame, include_dispatch_features=True)
+
+
+def test_feature_set_selection_excludes_targets_and_includes_named_lags() -> None:
+    frame = add_time_features(pd.DataFrame({"SETTLEMENTDATE": pd.date_range("2026-05-01", periods=13, freq="5min")}))
+    frame["temperature_2m"] = 20.0
+    frame["TOTALCLEARED"] = range(13)
+    frame["target_constrained"] = [1] + [0] * 11 + [1]
+    frame["target_constrained_next_6h"] = 1
+    frame = add_lag_features(frame)
+
+    columns = select_feature_columns(frame, feature_set="time_weather_dispatch_constraint_lag")
+
+    assert "hour_sin" in columns
+    assert "temperature_2m" in columns
+    assert "totalcleared_lag_1h" in columns
+    assert "target_constrained_lag_1h" in columns
+    assert "target_constrained" not in columns
+    assert "target_constrained_next_6h" not in columns
+
+
+def test_lag_features_use_only_past_rows() -> None:
+    intervals = pd.date_range("2026-05-01 00:00:00", periods=14, freq="5min")
+    frame = pd.DataFrame(
+        {
+            "SETTLEMENTDATE": intervals,
+            "TOTALCLEARED": list(range(14)),
+            "target_constrained": [1] + [0] * 11 + [1, 0],
+            "max_marginal_value": [5.0] + [0.0] * 11 + [9.0, 0.0],
+            "max_violation_degree": [0.0] * 14,
+            "binding_constraint_count": [1] + [0] * 11 + [1, 0],
+        }
+    )
+
+    out = add_lag_features(frame, intervals_per_hour=12)
+
+    assert out.loc[12, "target_constrained_lag_1h"] == 1
+    assert out.loc[12, "target_constrained_roll_count_1h"] == 1
+    assert out.loc[13, "target_constrained_roll_count_1h"] == 1
+    assert out.loc[12, "max_marginal_value_rolling_max_1h"] == 5.0
+    assert out.loc[13, "max_marginal_value_rolling_max_1h"] == 9.0
+    assert out.loc[12, "totalcleared_lag_1h"] == 0
+    assert out.loc[12, "target_constrained_hours_since_last"] == 1.0

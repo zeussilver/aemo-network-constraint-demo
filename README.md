@@ -320,6 +320,53 @@ artifacts/cathrock_6h_backtest_folds.csv
 artifacts/example_cathrock_6h_backtest_response.json
 ```
 
+### Phase 3: Performance Improvement
+
+Phase 3 adds leakage-guarded feature sets, model benchmarking, and a best-model bundle for the same `CATHROCK` 60-day
+6h horizon target.
+
+Run:
+
+```bash
+python scripts/benchmark_models.py \
+  --duid CATHROCK \
+  --days 60 \
+  --horizon-hours 6 \
+  --feature-sets time_only time_weather time_weather_dispatch_lag time_weather_constraint_lag \
+  --model-types logistic_regression random_forest hist_gradient_boosting \
+  --out artifacts/performance_benchmark.csv \
+  --best-model-out artifacts/cathrock_6h_best_model.joblib \
+  --report-out chatref/phase3_performance_report.md
+```
+
+Observed best setting:
+
+```text
+model: logistic_regression
+feature_set: time_weather_dispatch_lag
+evaluated_folds: 2
+skipped_folds: 1
+mean_average_precision: 0.6150641656145446
+mean_roc_auc: 0.6186397911557198
+mean_precision_at_top_5_percent: 0.6333333333333333
+mean_lift_at_top_5_percent: 1.9449390521758945
+```
+
+Compared with the Phase 2.5 event-window AP of `0.4292536031939571`, the dispatch-lag feature set improved ranking in
+this sparse-event backtest. This is still not a production accuracy claim: the normal chronological holdout has no
+positive labels, event-window folds are few, and P5MIN/Predispatch, outage, regional demand, and interconnector inputs
+remain outside this demo.
+
+Phase 3 artifacts:
+
+```text
+artifacts/performance_benchmark.csv
+artifacts/cathrock_6h_best_model.joblib
+artifacts/cathrock_6h_best_model_metrics.json
+artifacts/cathrock_6h_feature_importance.csv
+chatref/phase3_performance_report.md
+```
+
 ### 3. Run tests
 
 The test suite is offline and uses synthetic AEMO-style ZIP payloads, mocked HTTP calls, and small in-memory training data.
@@ -347,7 +394,7 @@ uvicorn app:app --reload
 Query:
 
 ```bash
-curl "http://127.0.0.1:8000/forecast/CATHROCK?model_path=artifacts/cathrock_6h.joblib"
+curl "http://127.0.0.1:8000/forecast/CATHROCK?model_path=artifacts/cathrock_6h_best_model.joblib"
 ```
 
 The API infers `horizon_hours=6` from the model bundle when the query parameter is omitted.
@@ -355,7 +402,7 @@ The API infers `horizon_hours=6` from the model bundle when the query parameter 
 Explicit horizon also works:
 
 ```bash
-curl "http://127.0.0.1:8000/forecast/CATHROCK?horizon_hours=6&model_path=artifacts/cathrock_6h.joblib"
+curl "http://127.0.0.1:8000/forecast/CATHROCK?horizon_hours=6&model_path=artifacts/cathrock_6h_best_model.joblib"
 ```
 
 If an explicit horizon mismatches the model bundle, the API returns a clear `400` error instead of silently serving the
@@ -369,7 +416,7 @@ Example response shape:
   "connection_point": "SCRK",
   "horizon_hours": 6,
   "model": {
-    "model_type": "balanced_logistic_regression",
+    "model_type": "logistic_regression",
     "target_column": "target_constrained_next_6h",
     "positive_rate": 0.013249651324965132
   },

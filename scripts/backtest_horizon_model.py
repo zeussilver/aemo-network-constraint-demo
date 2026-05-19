@@ -14,7 +14,7 @@ from typing import Iterable
 
 import joblib
 import pandas as pd
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -22,7 +22,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.aemo_constraint_demo.aemo_client import load_next_day_dispatch_tables, read_monthly_table
 from src.aemo_constraint_demo.features import (
-    add_time_features,
+    FEATURE_SET_CHOICES,
+    add_feature_set_features,
     build_label_frame,
     numericise_feature_columns,
     relevant_constraints_for_duid,
@@ -33,6 +34,7 @@ from src.aemo_constraint_demo.train import (
     DEFAULT_BACKTEST_WINDOW_HOURS,
     DEFAULT_COORDINATE_FILE,
     INTERVALS_PER_HOUR,
+    MODEL_TYPE_CHOICES,
     _fit_probability_model,
     _format_timestamp,
     _safe_metric,
@@ -58,11 +60,19 @@ def _is_target_like_column(column: str) -> bool:
     return normalized == "target_constrained" or normalized.startswith("target_constrained_next_")
 
 
-def safe_feature_columns(frame: pd.DataFrame, include_dispatch_features: bool = False) -> list[str]:
+def safe_feature_columns(
+    frame: pd.DataFrame,
+    include_dispatch_features: bool = False,
+    feature_set: str | None = None,
+) -> list[str]:
     """Return train.py-compatible features with an explicit target-column guard."""
     return [
         col
-        for col in select_feature_columns(frame, include_dispatch_features=include_dispatch_features)
+        for col in select_feature_columns(
+            frame,
+            include_dispatch_features=include_dispatch_features,
+            feature_set=feature_set,
+        )
         if not _is_target_like_column(col)
     ]
 
@@ -124,6 +134,7 @@ def evaluate_event_windows(
     feature_cols: list[str],
     target_column: str,
     windows: list[ValidationWindow],
+    model_type: str = "logistic_regression",
 ) -> list[dict]:
     working = frame.dropna(subset=[target_column, "SETTLEMENTDATE"]).copy()
     working["SETTLEMENTDATE"] = pd.to_datetime(working["SETTLEMENTDATE"], errors="coerce")
@@ -152,7 +163,9 @@ def evaluate_event_windows(
             "precision_at_top_10_percent": None,
             "lift_at_top_5_percent": None,
             "lift_at_top_10_percent": None,
+            "calibration_brier_score": None,
             "model_type": None,
+            "requested_model_type": model_type,
             "skipped": True,
             "skip_reason": None,
             "train_start": _format_timestamp(train_df["SETTLEMENTDATE"].min()) if not train_df.empty else None,
@@ -180,7 +193,12 @@ def evaluate_event_windows(
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning, module=r"sklearn\..*")
-            model, model_type, _ = _fit_probability_model(train_df, feature_cols, target_column)
+            model, resolved_model_type, _ = _fit_probability_model(
+                train_df,
+                feature_cols,
+                target_column,
+                model_type=model_type,
+            )
             scores = model.predict_proba(validation_df[feature_cols])[:, 1]
         precision_5, lift_5 = precision_and_lift_at_top_fraction(y_validation, scores, 0.05)
         precision_10, lift_10 = precision_and_lift_at_top_fraction(y_validation, scores, 0.10)
@@ -194,7 +212,9 @@ def evaluate_event_windows(
                 "precision_at_top_10_percent": precision_10,
                 "lift_at_top_5_percent": lift_5,
                 "lift_at_top_10_percent": lift_10,
-                "model_type": model_type,
+                "calibration_brier_score": float(brier_score_loss(y_validation, scores)),
+                "model_type": resolved_model_type,
+                "requested_model_type": model_type,
                 "skipped": False,
                 "skip_reason": "",
             }
@@ -242,6 +262,7 @@ def summarise_backtest(
         "mean_precision_at_top_10_percent": _mean_metric(records, "precision_at_top_10_percent"),
         "mean_lift_at_top_5_percent": _mean_metric(records, "lift_at_top_5_percent"),
         "mean_lift_at_top_10_percent": _mean_metric(records, "lift_at_top_10_percent"),
+        "mean_calibration_brier_score": _mean_metric(records, "calibration_brier_score"),
         "limitations": limitations,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -257,6 +278,7 @@ def build_backtest_frame(
     static_month: int | None = None,
     bind_threshold: float = 0.0,
     include_dispatch_features: bool = False,
+    feature_set: str = "time_weather",
     no_weather: bool = False,
     latitude: float | None = None,
     longitude: float | None = None,
@@ -294,7 +316,7 @@ def build_backtest_frame(
     if dropped_incomplete_horizon_rows:
         tail_index = frame.tail(dropped_incomplete_horizon_rows).index
         frame.loc[tail_index, target_column] = pd.NA
-    frame = add_time_features(frame)
+    frame = add_feature_set_features(frame, feature_set=feature_set, intervals_per_hour=INTERVALS_PER_HOUR)
 
     if not no_weather:
         start = frame["SETTLEMENTDATE"].min().date()
@@ -302,7 +324,11 @@ def build_backtest_frame(
         weather = fetch_open_meteo_history(latitude, longitude, start, end)
         frame = merge_weather_to_intervals(frame, weather)
 
-    feature_cols = safe_feature_columns(frame, include_dispatch_features=include_dispatch_features)
+    feature_cols = safe_feature_columns(
+        frame,
+        include_dispatch_features=include_dispatch_features,
+        feature_set=feature_set,
+    )
     if not feature_cols:
         raise ValueError("No feature columns available after feature engineering.")
 
@@ -314,6 +340,7 @@ def build_backtest_frame(
         "coordinate_source": coordinate_metadata,
         "dropped_incomplete_horizon_rows": dropped_incomplete_horizon_rows,
         "feature_columns": feature_cols,
+        "feature_set": feature_set,
     }
     return frame, feature_cols, target_column, metadata
 
@@ -344,6 +371,7 @@ def run_backtest(args: argparse.Namespace) -> dict:
         static_month=args.static_month,
         bind_threshold=args.bind_threshold,
         include_dispatch_features=include_dispatch_features,
+        feature_set=getattr(args, "feature_set", "time_weather"),
         no_weather=no_weather,
         latitude=latitude,
         longitude=longitude,
@@ -354,7 +382,13 @@ def run_backtest(args: argparse.Namespace) -> dict:
         window_hours=args.validation_window_hours,
         max_folds=args.max_folds,
     )
-    records = evaluate_event_windows(frame=frame, feature_cols=feature_cols, target_column=target_column, windows=windows)
+    records = evaluate_event_windows(
+        frame=frame,
+        feature_cols=feature_cols,
+        target_column=target_column,
+        windows=windows,
+        model_type=getattr(args, "model_type", "logistic_regression"),
+    )
     summary = summarise_backtest(
         records=records,
         duid=args.duid,
@@ -369,6 +403,8 @@ def run_backtest(args: argparse.Namespace) -> dict:
             "connection_point": metadata["connection_point"],
             "relevant_genconid_count": metadata["relevant_genconid_count"],
             "feature_columns": feature_cols,
+            "feature_set": metadata["feature_set"],
+            "model_type": getattr(args, "model_type", "logistic_regression"),
             "total_rows": int(len(frame)),
             "positive_rows": int(frame[target_column].sum()),
             "positive_rate": float(frame[target_column].mean()) if len(frame) else None,
@@ -400,6 +436,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--static-month", type=int, default=None)
     parser.add_argument("--bind-threshold", type=float, default=0.0)
     parser.add_argument("--include-dispatch-features", action="store_true")
+    parser.add_argument("--feature-set", choices=FEATURE_SET_CHOICES, default="time_weather")
+    parser.add_argument("--model-type", choices=MODEL_TYPE_CHOICES, default="logistic_regression")
     parser.add_argument("--no-weather", action="store_true")
     parser.add_argument("--lat", type=float, default=None)
     parser.add_argument("--lon", type=float, default=None)

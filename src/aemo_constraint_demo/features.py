@@ -47,6 +47,18 @@ OPTIONAL_DISPATCH_FEATURE_COLUMNS = [
     "RAMPDOWNRATE",
 ]
 
+LAG_WINDOWS_HOURS = (1, 3, 6)
+
+FEATURE_SET_NAMES = [
+    "time_only",
+    "time_weather",
+    "time_weather_dispatch_lag",
+    "time_weather_constraint_lag",
+    "time_weather_dispatch_constraint_lag",
+]
+
+FEATURE_SET_CHOICES = tuple(FEATURE_SET_NAMES)
+
 
 def standardise_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
@@ -159,6 +171,9 @@ def build_label_frame(
     if con.empty or "CONSTRAINTID" not in con.columns:
         base["target_constrained"] = 0
         base["binding_constraint_ids"] = ""
+        base["max_marginal_value"] = 0.0
+        base["max_violation_degree"] = 0.0
+        base["binding_constraint_count"] = 0
         return base
 
     con = con.copy()
@@ -169,6 +184,9 @@ def build_label_frame(
     if con.empty:
         base["target_constrained"] = 0
         base["binding_constraint_ids"] = ""
+        base["max_marginal_value"] = 0.0
+        base["max_violation_degree"] = 0.0
+        base["binding_constraint_count"] = 0
         return base
 
     con["SETTLEMENTDATE"] = parse_datetime(con["SETTLEMENTDATE"])
@@ -183,6 +201,8 @@ def build_label_frame(
             target_constrained=("_IS_BINDING", "max"),
             binding_constraint_ids=("CONSTRAINTID", lambda values: ";".join(sorted(set(values)))),
             max_marginal_value=("MARGINALVALUE", "max"),
+            max_violation_degree=("VIOLATIONDEGREE", "max"),
+            binding_constraint_count=("CONSTRAINTID", "nunique"),
         )
         .reset_index()
     )
@@ -192,6 +212,8 @@ def build_label_frame(
     out["target_constrained"] = out["target_constrained"].fillna(0).astype(int)
     out["binding_constraint_ids"] = out["binding_constraint_ids"].fillna("")
     out["max_marginal_value"] = out["max_marginal_value"].fillna(0.0)
+    out["max_violation_degree"] = out["max_violation_degree"].fillna(0.0)
+    out["binding_constraint_count"] = out["binding_constraint_count"].fillna(0).astype(int)
     return out.sort_values("SETTLEMENTDATE").reset_index(drop=True)
 
 
@@ -217,8 +239,149 @@ def numericise_feature_columns(df: pd.DataFrame, columns: Iterable[str]) -> pd.D
     return out
 
 
-def select_feature_columns(df: pd.DataFrame, include_dispatch_features: bool = False) -> list[str]:
-    candidates = list(TIME_FEATURE_COLUMNS) + list(WEATHER_FEATURE_COLUMNS)
+def _is_target_like_column(column: str) -> bool:
+    normalized = str(column).strip().lower()
+    return normalized == "target_constrained" or normalized.startswith("target_constrained_next_")
+
+
+def _safe_existing_columns(df: pd.DataFrame, candidates: Iterable[str]) -> list[str]:
+    return [col for col in candidates if col in df.columns and not _is_target_like_column(col)]
+
+
+def dispatch_lag_feature_columns(df: pd.DataFrame) -> list[str]:
+    columns: list[str] = []
+    for source_col in OPTIONAL_DISPATCH_FEATURE_COLUMNS:
+        for hours in LAG_WINDOWS_HOURS:
+            columns.append(f"{source_col.lower()}_lag_{hours}h")
+            columns.append(f"{source_col.lower()}_rolling_mean_{hours}h")
+    return _safe_existing_columns(df, columns)
+
+
+def constraint_lag_feature_columns(df: pd.DataFrame) -> list[str]:
+    candidates: list[str] = []
+    for hours in LAG_WINDOWS_HOURS:
+        candidates.extend(
+            [
+                f"target_constrained_lag_{hours}h",
+                f"target_constrained_roll_count_{hours}h",
+                f"max_marginal_value_lag_{hours}h",
+                f"max_marginal_value_rolling_max_{hours}h",
+                f"max_violation_degree_lag_{hours}h",
+                f"max_violation_degree_rolling_max_{hours}h",
+                f"binding_constraint_count_lag_{hours}h",
+                f"binding_constraint_count_rolling_sum_{hours}h",
+            ]
+        )
+    candidates.append("target_constrained_hours_since_last")
+    return _safe_existing_columns(df, candidates)
+
+
+def add_lag_features(
+    df: pd.DataFrame,
+    intervals_per_hour: int = 12,
+    time_col: str = "SETTLEMENTDATE",
+) -> pd.DataFrame:
+    """Add leakage-safe lag and rolling features.
+
+    Rolling features are shifted by one interval before aggregation, so the
+    current row's label never contributes to its own model features.
+    """
+    out = df.copy()
+    if out.empty:
+        return out
+
+    out = out.sort_values(time_col).reset_index(drop=True) if time_col in out.columns else out.reset_index(drop=True)
+    intervals_per_hour = int(intervals_per_hour)
+    if intervals_per_hour <= 0:
+        raise ValueError("intervals_per_hour must be positive.")
+
+    for source_col in OPTIONAL_DISPATCH_FEATURE_COLUMNS:
+        if source_col not in out.columns:
+            continue
+        values = pd.to_numeric(out[source_col], errors="coerce")
+        shifted = values.shift(1)
+        for hours in LAG_WINDOWS_HOURS:
+            window = max(1, int(hours * intervals_per_hour))
+            out[f"{source_col.lower()}_lag_{hours}h"] = values.shift(window)
+            out[f"{source_col.lower()}_rolling_mean_{hours}h"] = shifted.rolling(window=window, min_periods=1).mean()
+
+    if "target_constrained" in out.columns:
+        target = pd.to_numeric(out["target_constrained"], errors="coerce").fillna(0).astype(int)
+        shifted_target = target.shift(1)
+        for hours in LAG_WINDOWS_HOURS:
+            window = max(1, int(hours * intervals_per_hour))
+            out[f"target_constrained_lag_{hours}h"] = target.shift(window).fillna(0).astype(int)
+            out[f"target_constrained_roll_count_{hours}h"] = (
+                shifted_target.rolling(window=window, min_periods=1).sum().fillna(0)
+            )
+
+        if time_col in out.columns:
+            timestamps = parse_datetime(out[time_col])
+            previous_positive_time = timestamps.shift(1).where(shifted_target.eq(1)).ffill()
+            out["target_constrained_hours_since_last"] = (
+                (timestamps - previous_positive_time).dt.total_seconds() / 3600.0
+            )
+        else:
+            previous_positive_index = pd.Series(np.where(shifted_target.eq(1), out.index, np.nan)).ffill()
+            out["target_constrained_hours_since_last"] = (
+                (pd.Series(out.index, index=out.index) - previous_positive_index) / intervals_per_hour
+            )
+
+    constraint_value_sources = {
+        "max_marginal_value": "max",
+        "max_violation_degree": "max",
+        "binding_constraint_count": "sum",
+    }
+    for source_col, aggregate in constraint_value_sources.items():
+        if source_col not in out.columns:
+            continue
+        values = pd.to_numeric(out[source_col], errors="coerce").fillna(0.0)
+        shifted = values.shift(1)
+        for hours in LAG_WINDOWS_HOURS:
+            window = max(1, int(hours * intervals_per_hour))
+            out[f"{source_col}_lag_{hours}h"] = values.shift(window).fillna(0.0)
+            if aggregate == "sum":
+                out[f"{source_col}_rolling_sum_{hours}h"] = shifted.rolling(window=window, min_periods=1).sum().fillna(0.0)
+            else:
+                out[f"{source_col}_rolling_max_{hours}h"] = shifted.rolling(window=window, min_periods=1).max().fillna(0.0)
+
+    return out
+
+
+def add_feature_set_features(
+    df: pd.DataFrame,
+    feature_set: str = "time_weather",
+    intervals_per_hour: int = 12,
+) -> pd.DataFrame:
+    if feature_set not in FEATURE_SET_CHOICES:
+        raise ValueError(f"Unknown feature_set {feature_set!r}. Choose one of {list(FEATURE_SET_CHOICES)}.")
+    out = add_time_features(df)
+    if "lag" in feature_set:
+        out = add_lag_features(out, intervals_per_hour=intervals_per_hour)
+    return out
+
+
+def select_feature_columns(
+    df: pd.DataFrame,
+    include_dispatch_features: bool = False,
+    feature_set: str | None = None,
+) -> list[str]:
+    if feature_set is None:
+        candidates = list(TIME_FEATURE_COLUMNS) + list(WEATHER_FEATURE_COLUMNS)
+        if include_dispatch_features:
+            candidates += OPTIONAL_DISPATCH_FEATURE_COLUMNS
+        return _safe_existing_columns(df, candidates)
+
+    if feature_set not in FEATURE_SET_CHOICES:
+        raise ValueError(f"Unknown feature_set {feature_set!r}. Choose one of {list(FEATURE_SET_CHOICES)}.")
+
+    candidates = list(TIME_FEATURE_COLUMNS)
+    if feature_set != "time_only":
+        candidates += WEATHER_FEATURE_COLUMNS
     if include_dispatch_features:
         candidates += OPTIONAL_DISPATCH_FEATURE_COLUMNS
-    return [col for col in candidates if col in df.columns]
+    if "dispatch" in feature_set:
+        candidates += dispatch_lag_feature_columns(df)
+    if "constraint" in feature_set:
+        candidates += constraint_lag_feature_columns(df)
+    return _safe_existing_columns(df, candidates)

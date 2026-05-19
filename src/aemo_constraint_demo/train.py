@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,13 +12,15 @@ import joblib
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import average_precision_score, classification_report, roc_auc_score
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
+from sklearn.metrics import average_precision_score, brier_score_loss, classification_report, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from .aemo_client import load_next_day_dispatch_tables, read_monthly_table
 from .features import (
-    add_time_features,
+    FEATURE_SET_CHOICES,
+    add_feature_set_features,
     build_label_frame,
     numericise_feature_columns,
     relevant_constraints_for_duid,
@@ -30,6 +33,7 @@ from .weather import fetch_open_meteo_history, merge_weather_to_intervals
 DEFAULT_COORDINATE_FILE = Path("data/duid_coordinates.csv")
 INTERVALS_PER_HOUR = 12
 DEFAULT_BACKTEST_WINDOW_HOURS = 24
+MODEL_TYPE_CHOICES = ("logistic_regression", "random_forest", "hist_gradient_boosting")
 
 
 def _safe_metric(func, y_true, y_score):
@@ -55,7 +59,9 @@ def _default_metrics_out(model_out: Path) -> Path:
     return model_out.with_name(f"{model_out.stem}_metrics.json")
 
 
-def _classifier_for_target(y_train: pd.Series) -> tuple[object, str]:
+def _classifier_for_target(y_train: pd.Series, model_type: str = "logistic_regression") -> tuple[object, str]:
+    if model_type not in MODEL_TYPE_CHOICES:
+        raise ValueError(f"Unknown model_type {model_type!r}. Choose one of {list(MODEL_TYPE_CHOICES)}.")
     train_classes = sorted(pd.Series(y_train).unique().tolist())
     if len(train_classes) < 2:
         constant_probability = float(pd.Series(y_train).mean())
@@ -64,29 +70,51 @@ def _classifier_for_target(y_train: pd.Series) -> tuple[object, str]:
             flush=True,
         )
         return ConstantProbabilityClassifier(probability=constant_probability), "constant_probability_baseline"
-    return LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42), "balanced_logistic_regression"
-
-
-def _build_pipeline(classifier: object) -> Pipeline:
-    return Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-            ("classifier", classifier),
-        ]
+    if model_type == "logistic_regression":
+        return LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42), model_type
+    if model_type == "random_forest":
+        return (
+            RandomForestClassifier(
+                n_estimators=80,
+                min_samples_leaf=2,
+                class_weight="balanced_subsample",
+                random_state=42,
+                n_jobs=-1,
+            ),
+            model_type,
+        )
+    return (
+        HistGradientBoostingClassifier(
+            max_iter=100,
+            learning_rate=0.05,
+            l2_regularization=0.1,
+            random_state=42,
+        ),
+        model_type,
     )
+
+
+def _build_pipeline(classifier: object, model_type: str) -> Pipeline:
+    steps: list[tuple[str, object]] = [("imputer", SimpleImputer(strategy="median"))]
+    if model_type in {"logistic_regression", "constant_probability_baseline"}:
+        steps.append(("scaler", StandardScaler()))
+    steps.append(("classifier", classifier))
+    return Pipeline(steps=steps)
 
 
 def _fit_probability_model(
     train_df: pd.DataFrame,
     feature_cols: list[str],
     target_column: str,
+    model_type: str = "logistic_regression",
 ) -> tuple[Pipeline, str, pd.Series]:
     y_train = train_df[target_column].astype(int)
-    classifier, model_type = _classifier_for_target(y_train)
-    model = _build_pipeline(classifier)
-    model.fit(train_df[feature_cols], y_train)
-    return model, model_type, y_train
+    classifier, resolved_model_type = _classifier_for_target(y_train, model_type=model_type)
+    model = _build_pipeline(classifier, model_type=resolved_model_type)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning, module=r"sklearn\..*")
+        model.fit(train_df[feature_cols], y_train)
+    return model, resolved_model_type, y_train
 
 
 def _evaluate_predictions(y_true: pd.Series, y_score, threshold: float = 0.5) -> dict:
@@ -97,6 +125,7 @@ def _evaluate_predictions(y_true: pd.Series, y_score, threshold: float = 0.5) ->
         "average_precision": _safe_metric(average_precision_score, y_true, y_score),
         "roc_auc": _safe_metric(roc_auc_score, y_true, y_score),
         "precision_at_top_5_percent": _precision_at_top_fraction(y_true, y_score, fraction=0.05),
+        "calibration_brier_score": float(brier_score_loss(y_true, y_score)),
         "classification_report": classification_report(y_true, y_pred, zero_division=0, output_dict=True),
     }
 
@@ -112,6 +141,7 @@ def supplemental_positive_backtest(
     feature_cols: list[str],
     target_column: str,
     window_hours: int = DEFAULT_BACKTEST_WINDOW_HOURS,
+    model_type: str = "logistic_regression",
 ) -> dict:
     """Evaluate the latest positive validation window with only prior rows for training."""
     window_hours = int(window_hours)
@@ -149,14 +179,19 @@ def supplemental_positive_backtest(
         if validation_df[target_column].nunique() < 2 or int(validation_df[target_column].sum()) <= 0:
             continue
 
-        model, model_type, y_train = _fit_probability_model(train_df, feature_cols, target_column)
+        model, resolved_model_type, y_train = _fit_probability_model(
+            train_df,
+            feature_cols,
+            target_column,
+            model_type=model_type,
+        )
         y_validation = validation_df[target_column].astype(int)
         y_score = model.predict_proba(validation_df[feature_cols])[:, 1]
         evaluation = _evaluate_predictions(y_validation, y_score)
         return {
             **base,
             "available": True,
-            "model_type": model_type,
+            "model_type": resolved_model_type,
             "train_start": _format_timestamp(train_df["SETTLEMENTDATE"].min()),
             "train_end": _format_timestamp(train_df["SETTLEMENTDATE"].max()),
             "validation_start": _format_timestamp(validation_df["SETTLEMENTDATE"].min()),
@@ -170,6 +205,7 @@ def supplemental_positive_backtest(
             "average_precision": evaluation["average_precision"],
             "roc_auc": evaluation["roc_auc"],
             "precision_at_top_5_percent": evaluation["precision_at_top_5_percent"],
+            "calibration_brier_score": evaluation["calibration_brier_score"],
             "classification_report": evaluation["classification_report"],
         }
 
@@ -248,6 +284,8 @@ def train_demo_model(
     horizon_hours: int = 0,
     backtest_window_hours: int = DEFAULT_BACKTEST_WINDOW_HOURS,
     include_dispatch_features: bool = False,
+    feature_set: str = "time_weather",
+    model_type: str = "logistic_regression",
     no_weather: bool = False,
 ) -> dict:
     cache_dir = Path(cache_dir)
@@ -258,6 +296,10 @@ def train_demo_model(
     horizon_hours = int(horizon_hours)
     if horizon_hours < 0:
         raise ValueError("horizon_hours must be non-negative.")
+    if feature_set not in FEATURE_SET_CHOICES:
+        raise ValueError(f"Unknown feature_set {feature_set!r}. Choose one of {list(FEATURE_SET_CHOICES)}.")
+    if model_type not in MODEL_TYPE_CHOICES:
+        raise ValueError(f"Unknown model_type {model_type!r}. Choose one of {list(MODEL_TYPE_CHOICES)}.")
     latitude, longitude, coordinate_metadata = resolve_coordinates(
         duid=duid,
         latitude=latitude,
@@ -303,7 +345,7 @@ def train_demo_model(
         if dropped_incomplete_horizon_rows:
             tail_index = frame.tail(dropped_incomplete_horizon_rows).index
             frame.loc[tail_index, target_column] = pd.NA
-    frame = add_time_features(frame)
+    frame = add_feature_set_features(frame, feature_set=feature_set, intervals_per_hour=INTERVALS_PER_HOUR)
 
     if not no_weather:
         start = frame["SETTLEMENTDATE"].min().date()
@@ -312,7 +354,11 @@ def train_demo_model(
         weather = fetch_open_meteo_history(latitude, longitude, start, end)
         frame = merge_weather_to_intervals(frame, weather)
 
-    feature_cols = select_feature_columns(frame, include_dispatch_features=include_dispatch_features)
+    feature_cols = select_feature_columns(
+        frame,
+        include_dispatch_features=include_dispatch_features,
+        feature_set=feature_set,
+    )
     if not feature_cols:
         raise ValueError("No feature columns available after feature engineering.")
     frame = numericise_feature_columns(frame, feature_cols)
@@ -325,7 +371,12 @@ def train_demo_model(
     if test_df.empty:
         raise ValueError("Not enough rows for a train/test split. Increase --days.")
 
-    model, model_type, y_train = _fit_probability_model(train_df, feature_cols, target_column)
+    model, resolved_model_type, y_train = _fit_probability_model(
+        train_df,
+        feature_cols,
+        target_column,
+        model_type=model_type,
+    )
     y_test = test_df[target_column].astype(int)
     y_score = model.predict_proba(test_df[feature_cols])[:, 1]
     trained_at = datetime.now(timezone.utc).isoformat()
@@ -335,6 +386,7 @@ def train_demo_model(
         feature_cols=feature_cols,
         target_column=target_column,
         window_hours=backtest_window_hours,
+        model_type=model_type,
     )
 
     metrics = {
@@ -344,7 +396,9 @@ def train_demo_model(
         "target_column": target_column,
         "connection_point_id": connection_point,
         "relevant_genconid_count": len(relevant),
-        "model_type": model_type,
+        "model_type": resolved_model_type,
+        "requested_model_type": model_type,
+        "feature_set": feature_set,
         "total_samples": int(len(frame)),
         "train_samples": int(len(train_df)),
         "test_samples": int(len(test_df)),
@@ -354,6 +408,7 @@ def train_demo_model(
         "average_precision": test_evaluation["average_precision"],
         "roc_auc": test_evaluation["roc_auc"],
         "precision_at_top_5_percent": test_evaluation["precision_at_top_5_percent"],
+        "calibration_brier_score": test_evaluation["calibration_brier_score"],
         "supplemental_positive_backtest": supplemental_backtest,
         "features": feature_cols,
         "trained_at": trained_at,
@@ -418,6 +473,9 @@ def train_demo_model(
         "metrics_out": str(metrics_path),
         "bind_threshold": bind_threshold,
         "include_dispatch_features": include_dispatch_features,
+        "feature_set": feature_set,
+        "model_type": resolved_model_type,
+        "requested_model_type": model_type,
         "no_weather": no_weather,
     }
     joblib.dump(bundle, model_out)
@@ -459,6 +517,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Supplemental positive held-out validation window length in hours; 0 disables it",
     )
     parser.add_argument("--include-dispatch-features", action="store_true")
+    parser.add_argument("--feature-set", choices=FEATURE_SET_CHOICES, default="time_weather")
+    parser.add_argument("--model-type", choices=MODEL_TYPE_CHOICES, default="logistic_regression")
     parser.add_argument("--no-weather", action="store_true")
     return parser
 
@@ -480,6 +540,8 @@ def main() -> None:
         horizon_hours=args.horizon_hours,
         backtest_window_hours=args.backtest_window_hours,
         include_dispatch_features=args.include_dispatch_features,
+        feature_set=args.feature_set,
+        model_type=args.model_type,
         no_weather=args.no_weather,
     )
 
