@@ -23,7 +23,7 @@ Implement Phase 2: train a horizon-based ML model for `CATHROCK`, `60` days, `6`
 - `README.md`
 - `artifacts/cathrock_6h_metrics.json`
 - `artifacts/example_cathrock_6h_response.json`
-- `chatref/phase2_horizon_training_report.md`
+- `chatref/phase2/phase2_horizon_training_report.md`
 
 Generated but ignored by Git in `artifacts/`:
 
@@ -197,15 +197,14 @@ The response includes:
 
 ## Handoff Files
 
-The repo itself is the Phase 2 implementation state. The redundant `chatref/phase2/` copy folder has been removed.
-Keep only these handoff files/paths:
+The repo itself is the Phase 2 implementation state. `chatref/phase2/` contains only the requested handoff copies:
 
-- `chatref/phase2_horizon_training_report.md`
-- `artifacts/cathrock_6h_metrics.json`
-- `artifacts/example_cathrock_6h_response.json`
-- `README.md`
-- `src/aemo_constraint_demo/train.py`
-- `app.py`
+- `chatref/phase2/phase2_horizon_training_report.md`
+- `chatref/phase2/artifacts/cathrock_6h_metrics.json`
+- `chatref/phase2/artifacts/example_cathrock_6h_response.json`
+- `chatref/phase2/README.md`
+- `chatref/phase2/src/aemo_constraint_demo/train.py`
+- `chatref/phase2/app.py`
 
 ## Coordinate Source
 
@@ -241,4 +240,4 @@ backtest shows time/weather-only ranking is weak.
 - API can load the horizon-trained artifact: `pass`
 - `python -m pytest -q` passes: `pass`
 - Model is non-baseline: `pass`
-- Redundant `chatref/phase2/` copied handoff folder removed: `pass`
+- `chatref/phase2/` contains only the requested handoff files: `pass`
