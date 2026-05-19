@@ -114,10 +114,47 @@ def test_train_demo_model_falls_back_to_constant_model_for_one_class_window(tmp_
 
 def test_train_arg_parser_accepts_horizon_hours() -> None:
     args = train_module.build_arg_parser().parse_args(
-        ["--duid", "D1", "--lat", "-27.4", "--lon", "151.7", "--horizon-hours", "6"]
+        [
+            "--duid",
+            "D1",
+            "--lat",
+            "-27.4",
+            "--lon",
+            "151.7",
+            "--horizon-hours",
+            "6",
+            "--backtest-window-hours",
+            "24",
+        ]
     )
 
     assert args.horizon_hours == 6
+    assert args.backtest_window_hours == 24
+
+
+def test_supplemental_positive_backtest_uses_prior_two_class_training_window() -> None:
+    intervals = pd.date_range("2026-05-01 00:00:00", periods=36, freq="5min")
+    frame = pd.DataFrame(
+        {
+            "SETTLEMENTDATE": intervals,
+            "feature": range(36),
+            "target": [1 if idx in {5, 25} else 0 for idx in range(36)],
+        }
+    )
+
+    result = train_module.supplemental_positive_backtest(
+        frame=frame,
+        feature_cols=["feature"],
+        target_column="target",
+        window_hours=1,
+    )
+
+    assert result["available"] is True
+    assert result["train_positive_samples"] == 1
+    assert result["validation_positive_samples"] == 1
+    assert result["validation_samples"] == 12
+    assert result["average_precision"] is not None
+    assert result["roc_auc"] is not None
 
 
 def test_train_demo_model_uses_horizon_target_and_writes_metrics(tmp_path: Path, monkeypatch) -> None:
@@ -171,5 +208,6 @@ def test_train_demo_model_uses_horizon_target_and_writes_metrics(tmp_path: Path,
     assert metrics["horizon_hours"] == 1
     assert metrics["target_column"] == target_column
     assert metrics["total_samples"] == 28
+    assert "supplemental_positive_backtest" in metrics
     assert all(not col.startswith("target_constrained") for col in metrics["features"])
     assert metrics_out.exists()

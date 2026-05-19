@@ -155,7 +155,12 @@ The script prints a JSON summary like:
     "total_samples": 17208,
     "positive_rate": 0.013249651324965132,
     "average_precision": null,
-    "roc_auc": null
+    "roc_auc": null,
+    "supplemental_positive_backtest": {
+      "available": true,
+      "average_precision": 0.4725645845784202,
+      "roc_auc": 0.3285603715170279
+    }
   }
 }
 ```
@@ -242,6 +247,25 @@ precision_at_top_5_percent: 0.0
 The model is non-baseline. The chronological test window has no positive horizon events, so AP and ROC AUC are
 reported as `null` rather than fabricated.
 
+The trainer also records a supplemental positive held-out backtest. It chooses the latest 24-hour validation window
+with positive labels and trains only on rows before that window:
+
+```text
+validation_start: 2026-04-22T22:20:00
+validation_end: 2026-04-23T22:15:00
+train_samples: 9723
+train_positive_samples: 76
+validation_samples: 288
+validation_positive_samples: 152
+validation_positive_rate: 0.5277777777777778
+average_precision: 0.4725645845784202
+roc_auc: 0.3285603715170279
+precision_at_top_5_percent: 0.8
+```
+
+The positive-window AUC is weak, which is useful signal for the demo: time and weather features alone rank the event
+window poorly, while the top 5% precision shows the fitted probabilities still concentrate some high-risk intervals.
+
 Metrics and response artifacts:
 
 ```text
@@ -295,8 +319,8 @@ Example response shape:
     {
       "interval_start": "2026-05-20T00:00:00",
       "duid": "CATHROCK",
-      "probability": 0.0124,
-      "ml_constraint_probability": 0.0124,
+      "probability": 0.0114,
+      "ml_constraint_probability": 0.0114,
       "ml_predicted_constrained": false,
       "risk_level": "very_low",
       "planned_constraints": [],

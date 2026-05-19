@@ -1,6 +1,7 @@
 # Phase 2 Horizon Training Report
 
 Timestamp: `2026-05-19 22:50:02 AEST`
+Supplemental backtest update: `2026-05-19 23:14:44 AEST`
 Project directory: `/Users/liuzhenqian/Desktop/aemo-network-constraint-demo`
 
 ## Objective
@@ -18,6 +19,7 @@ Implement Phase 2: train a horizon-based ML model for `CATHROCK`, `60` days, `6`
 - `tests/test_api.py`
 - `tests/test_features.py`
 - `tests/test_forecast.py`
+- `pytest.ini`
 - `README.md`
 - `artifacts/cathrock_6h_metrics.json`
 - `artifacts/example_cathrock_6h_response.json`
@@ -46,7 +48,7 @@ python -m pytest -q
 Result:
 
 ```text
-40 passed in 1.03s
+41 passed in 1.08s
 ```
 
 Training command:
@@ -141,11 +143,28 @@ Metrics:
   "average_precision": null,
   "roc_auc": null,
   "precision_at_top_5_percent": 0.0,
+  "supplemental_positive_backtest": {
+    "available": true,
+    "window_hours": 24,
+    "validation_start": "2026-04-22T22:20:00",
+    "validation_end": "2026-04-23T22:15:00",
+    "train_samples": 9723,
+    "train_positive_samples": 76,
+    "validation_samples": 288,
+    "validation_positive_samples": 152,
+    "validation_positive_rate": 0.5277777777777778,
+    "average_precision": 0.4725645845784202,
+    "roc_auc": 0.3285603715170279,
+    "precision_at_top_5_percent": 0.8
+  },
   "dropped_incomplete_horizon_rows": 72
 }
 ```
 
 The chronological test split has no positive horizon events, so `average_precision` and `roc_auc` are recorded as `null`.
+The supplemental backtest is a separate held-out validation window: it trains only on rows before the selected 24-hour
+window and evaluates on the latest positive window. The positive-window AUC is weak, but the validation set contains
+both classes and provides honest held-out AP/top-precision evidence.
 
 ## API Result
 
@@ -161,8 +180,9 @@ Observed example summary:
   "horizon_hours": 6,
   "forecast_rows": 72,
   "model_type": "balanced_logistic_regression",
-  "first_probability": 0.0124,
-  "first_risk_level": "very_low"
+  "first_probability": 0.0114,
+  "first_risk_level": "very_low",
+  "backtest_available": true
 }
 ```
 
@@ -195,6 +215,7 @@ Collected files under `chatref/phase2/`:
 - `test_features.py`
 - `test_forecast.py`
 - `test_scan.py`
+- `pytest.ini`
 - `phase2.md`
 - `phase2_execution_plan.md`
 
@@ -209,6 +230,7 @@ Collected files under `chatref/phase2/`:
 
 - Logistic regression emitted sklearn numerical runtime warnings during fitting, but training completed and produced a usable probability model.
 - The chronological held-out window has no positive horizon labels, so AP and ROC AUC are undefined for this split.
+- `chatref/phase2` contains copied test files for handoff. `pytest.ini` now restricts test discovery to `tests/` so the copies do not collide with the working test modules.
 - `data/cache` is about `974M` after training and is excluded from Git/handoff packaging.
 
 ## GitHub Polish Readiness
@@ -219,7 +241,8 @@ Ready for a GitHub demo with stated limitations. The end-to-end path now works:
 DUID -> relevant GENCONIDs -> future-only 6h labels -> weather/time features -> ML model -> API forecast response
 ```
 
-Recommended next step: add a short backtesting note or alternate validation window so the demo can show a held-out split with positive events as well as the strict chronological result.
+Recommended next step: add stronger forecast features such as P5MIN/predispatch inputs, because the positive-window
+backtest shows time/weather-only ranking is weak.
 
 ## Acceptance Criteria Status
 

@@ -29,6 +29,7 @@ from .weather import fetch_open_meteo_history, merge_weather_to_intervals
 
 DEFAULT_COORDINATE_FILE = Path("data/duid_coordinates.csv")
 INTERVALS_PER_HOUR = 12
+DEFAULT_BACKTEST_WINDOW_HOURS = 24
 
 
 def _safe_metric(func, y_true, y_score):
@@ -52,6 +53,127 @@ def _precision_at_top_fraction(y_true, y_score, fraction: float = 0.05) -> float
 
 def _default_metrics_out(model_out: Path) -> Path:
     return model_out.with_name(f"{model_out.stem}_metrics.json")
+
+
+def _classifier_for_target(y_train: pd.Series) -> tuple[object, str]:
+    train_classes = sorted(pd.Series(y_train).unique().tolist())
+    if len(train_classes) < 2:
+        constant_probability = float(pd.Series(y_train).mean())
+        print(
+            "Training window contains one target class only; using a constant-probability baseline model.",
+            flush=True,
+        )
+        return ConstantProbabilityClassifier(probability=constant_probability), "constant_probability_baseline"
+    return LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42), "balanced_logistic_regression"
+
+
+def _build_pipeline(classifier: object) -> Pipeline:
+    return Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+            ("classifier", classifier),
+        ]
+    )
+
+
+def _fit_probability_model(
+    train_df: pd.DataFrame,
+    feature_cols: list[str],
+    target_column: str,
+) -> tuple[Pipeline, str, pd.Series]:
+    y_train = train_df[target_column].astype(int)
+    classifier, model_type = _classifier_for_target(y_train)
+    model = _build_pipeline(classifier)
+    model.fit(train_df[feature_cols], y_train)
+    return model, model_type, y_train
+
+
+def _evaluate_predictions(y_true: pd.Series, y_score, threshold: float = 0.5) -> dict:
+    y_true = pd.Series(y_true).astype(int)
+    y_pred = (y_score >= threshold).astype(int)
+    return {
+        "positive_rate": float(y_true.mean()),
+        "average_precision": _safe_metric(average_precision_score, y_true, y_score),
+        "roc_auc": _safe_metric(roc_auc_score, y_true, y_score),
+        "precision_at_top_5_percent": _precision_at_top_fraction(y_true, y_score, fraction=0.05),
+        "classification_report": classification_report(y_true, y_pred, zero_division=0, output_dict=True),
+    }
+
+
+def _format_timestamp(value: pd.Timestamp) -> str | None:
+    if pd.isna(value):
+        return None
+    return pd.Timestamp(value).isoformat()
+
+
+def supplemental_positive_backtest(
+    frame: pd.DataFrame,
+    feature_cols: list[str],
+    target_column: str,
+    window_hours: int = DEFAULT_BACKTEST_WINDOW_HOURS,
+) -> dict:
+    """Evaluate the latest positive validation window with only prior rows for training."""
+    window_hours = int(window_hours)
+    base = {
+        "available": False,
+        "window_hours": window_hours,
+        "selection": "latest_positive_window_with_prior_two_class_training",
+    }
+    if window_hours <= 0:
+        return {**base, "reason": "disabled"}
+
+    working = frame.dropna(subset=[target_column, "SETTLEMENTDATE"]).copy()
+    if working.empty:
+        return {**base, "reason": "no rows available"}
+
+    working["SETTLEMENTDATE"] = pd.to_datetime(working["SETTLEMENTDATE"], errors="coerce")
+    working = working.dropna(subset=["SETTLEMENTDATE"]).sort_values("SETTLEMENTDATE").reset_index(drop=True)
+    working[target_column] = working[target_column].astype(int)
+
+    positive_times = working.loc[working[target_column] == 1, "SETTLEMENTDATE"].dropna().sort_values().unique()
+    if len(positive_times) == 0:
+        return {**base, "reason": "no positive labels available"}
+
+    for value in reversed(positive_times):
+        validation_end = pd.Timestamp(value)
+        validation_start = validation_end - pd.Timedelta(hours=window_hours)
+        train_df = working[working["SETTLEMENTDATE"] <= validation_start].copy()
+        validation_df = working[
+            (working["SETTLEMENTDATE"] > validation_start) & (working["SETTLEMENTDATE"] <= validation_end)
+        ].copy()
+        if train_df.empty or validation_df.empty:
+            continue
+        if train_df[target_column].nunique() < 2:
+            continue
+        if validation_df[target_column].nunique() < 2 or int(validation_df[target_column].sum()) <= 0:
+            continue
+
+        model, model_type, y_train = _fit_probability_model(train_df, feature_cols, target_column)
+        y_validation = validation_df[target_column].astype(int)
+        y_score = model.predict_proba(validation_df[feature_cols])[:, 1]
+        evaluation = _evaluate_predictions(y_validation, y_score)
+        return {
+            **base,
+            "available": True,
+            "model_type": model_type,
+            "train_start": _format_timestamp(train_df["SETTLEMENTDATE"].min()),
+            "train_end": _format_timestamp(train_df["SETTLEMENTDATE"].max()),
+            "validation_start": _format_timestamp(validation_df["SETTLEMENTDATE"].min()),
+            "validation_end": _format_timestamp(validation_df["SETTLEMENTDATE"].max()),
+            "train_samples": int(len(train_df)),
+            "validation_samples": int(len(validation_df)),
+            "train_positive_rate": float(y_train.mean()),
+            "validation_positive_rate": evaluation["positive_rate"],
+            "train_positive_samples": int(y_train.sum()),
+            "validation_positive_samples": int(y_validation.sum()),
+            "average_precision": evaluation["average_precision"],
+            "roc_auc": evaluation["roc_auc"],
+            "precision_at_top_5_percent": evaluation["precision_at_top_5_percent"],
+            "classification_report": evaluation["classification_report"],
+        }
+
+    return {**base, "reason": "no positive validation window found with prior two-class training"}
 
 
 def load_duid_coordinate(duid: str, coordinate_file: str | Path = DEFAULT_COORDINATE_FILE) -> dict | None:
@@ -124,6 +246,7 @@ def train_demo_model(
     static_month: int | None = None,
     bind_threshold: float = 0.0,
     horizon_hours: int = 0,
+    backtest_window_hours: int = DEFAULT_BACKTEST_WINDOW_HOURS,
     include_dispatch_features: bool = False,
     no_weather: bool = False,
 ) -> dict:
@@ -202,36 +325,17 @@ def train_demo_model(
     if test_df.empty:
         raise ValueError("Not enough rows for a train/test split. Increase --days.")
 
-    X_train, y_train = train_df[feature_cols], train_df[target_column].astype(int)
-    X_test, y_test = test_df[feature_cols], test_df[target_column].astype(int)
-
-    train_classes = sorted(y_train.unique().tolist())
-    if len(train_classes) < 2:
-        constant_probability = float(y_train.mean())
-        print(
-            "Training window contains one target class only; using a constant-probability baseline model.",
-            flush=True,
-        )
-        classifier = ConstantProbabilityClassifier(probability=constant_probability)
-        model_type = "constant_probability_baseline"
-    else:
-        classifier = LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42)
-        model_type = "balanced_logistic_regression"
-
-    model = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-            ("classifier", classifier),
-        ]
-    )
-    model.fit(X_train, y_train)
-    y_score = model.predict_proba(X_test)[:, 1]
-    y_pred = (y_score >= 0.5).astype(int)
+    model, model_type, y_train = _fit_probability_model(train_df, feature_cols, target_column)
+    y_test = test_df[target_column].astype(int)
+    y_score = model.predict_proba(test_df[feature_cols])[:, 1]
     trained_at = datetime.now(timezone.utc).isoformat()
-    average_precision = _safe_metric(average_precision_score, y_test, y_score)
-    roc_auc = _safe_metric(roc_auc_score, y_test, y_score)
-    precision_at_top_5_percent = _precision_at_top_fraction(y_test, y_score, fraction=0.05)
+    test_evaluation = _evaluate_predictions(y_test, y_score)
+    supplemental_backtest = supplemental_positive_backtest(
+        frame=frame,
+        feature_cols=feature_cols,
+        target_column=target_column,
+        window_hours=backtest_window_hours,
+    )
 
     metrics = {
         "duid": duid.upper(),
@@ -247,9 +351,10 @@ def train_demo_model(
         "positive_rate": float(frame[target_column].mean()),
         "train_positive_rate": float(y_train.mean()),
         "test_positive_rate": float(y_test.mean()),
-        "average_precision": average_precision,
-        "roc_auc": roc_auc,
-        "precision_at_top_5_percent": precision_at_top_5_percent,
+        "average_precision": test_evaluation["average_precision"],
+        "roc_auc": test_evaluation["roc_auc"],
+        "precision_at_top_5_percent": test_evaluation["precision_at_top_5_percent"],
+        "supplemental_positive_backtest": supplemental_backtest,
         "features": feature_cols,
         "trained_at": trained_at,
         "dropped_incomplete_horizon_rows": dropped_incomplete_horizon_rows,
@@ -257,9 +362,9 @@ def train_demo_model(
         "rows": int(len(frame)),
         "train_rows": int(len(train_df)),
         "test_rows": int(len(test_df)),
-        "test_average_precision": average_precision,
-        "test_roc_auc": roc_auc,
-        "classification_report": classification_report(y_test, y_pred, zero_division=0, output_dict=True),
+        "test_average_precision": test_evaluation["average_precision"],
+        "test_roc_auc": test_evaluation["roc_auc"],
+        "classification_report": test_evaluation["classification_report"],
     }
     metrics_path.write_text(json.dumps(metrics, indent=2, default=str), encoding="utf-8")
 
@@ -347,6 +452,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--static-month", type=int, default=None, help="Optional MMSDM standing-data month")
     parser.add_argument("--bind-threshold", type=float, default=0.0)
     parser.add_argument("--horizon-hours", type=int, default=0, help="Future-only target horizon in hours; 0 uses current interval")
+    parser.add_argument(
+        "--backtest-window-hours",
+        type=int,
+        default=DEFAULT_BACKTEST_WINDOW_HOURS,
+        help="Supplemental positive held-out validation window length in hours; 0 disables it",
+    )
     parser.add_argument("--include-dispatch-features", action="store_true")
     parser.add_argument("--no-weather", action="store_true")
     return parser
@@ -367,6 +478,7 @@ def main() -> None:
         static_month=args.static_month,
         bind_threshold=args.bind_threshold,
         horizon_hours=args.horizon_hours,
+        backtest_window_hours=args.backtest_window_hours,
         include_dispatch_features=args.include_dispatch_features,
         no_weather=args.no_weather,
     )
