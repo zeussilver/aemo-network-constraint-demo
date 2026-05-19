@@ -1,0 +1,10 @@
+fastapi>=0.111
+httpx>=0.27
+uvicorn[standard]>=0.30
+joblib>=1.4
+numpy>=1.26
+pandas>=2.2
+pytest>=8.0
+requests>=2.32
+scikit-learn>=1.5
+notebook>=7.2

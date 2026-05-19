@@ -1,0 +1,101 @@
+duid,days,status,regionid,stationid,station_name,connection_point_id,relevant_genconid_count,total_intervals,positive_intervals,positive_rate,unique_binding_genconid_count,first_positive_dispatch_interval,last_positive_dispatch_interval,recommended,recommendation_reason
+MCINTYR1,30,ok,,,,QMSW1M,27,8640,0,0.0,0,,,False,positive_intervals below 20
+STOCKYD1,30,ok,,,,VHGT1S,47,8640,0,0.0,0,,,False,positive_intervals below 20
+COOPGWF1,30,ok,,,,QCPG1C,29,8640,0,0.0,0,,,False,positive_intervals below 20
+MACARTH1,30,ok,,,,VTRT1M,111,8640,0,0.0,0,,,False,positive_intervals below 20
+WDGPH1,30,ok,,,,QWDR1W,29,8640,0,0.0,0,,,False,positive_intervals below 20
+ALDGASF1,30,ok,,,,QLCS1A,208,8640,0,0.0,0,,,False,positive_intervals below 20
+RYEPARK1,30,ok,,,,NRPK1R,501,8640,0,0.0,0,,,False,positive_intervals below 20
+CUSF1,30,ok,,,,NCRN1C,258,8640,0,0.0,0,,,False,positive_intervals below 20
+CLRKCWF1,30,ok,,,,QBSW1C,208,8640,0,0.0,0,,,False,positive_intervals below 20
+WELNSF1,30,ok,,,,NWLN1W,447,8640,2,0.0002314814814814815,1,2026-04-28 07:30:00,2026-04-28 07:35:00,False,positive_intervals below 20
+MOORAWF1,30,ok,,,,VELT2M,139,8640,0,0.0,0,,,False,positive_intervals below 20
+GPWFWST2,30,ok,,,,VGP22G,47,8640,0,0.0,0,,,False,positive_intervals below 20
+BRDDSF01,30,ok,,,,QBSS1B,196,8640,0,0.0,0,,,False,positive_intervals below 20
+WOLARSF1,30,ok,,,,NWOW1W,436,8640,0,0.0,0,,,False,positive_intervals below 20
+DARLSF1,30,ok,,,,NDNS1D,842,8640,0,0.0,0,,,False,positive_intervals below 20
+SAPHWF1,30,ok,,,,NSAP1S,822,8640,0,0.0,0,,,False,positive_intervals below 20
+GPWFWST1,30,ok,,,,VGP21G,47,8640,0,0.0,0,,,False,positive_intervals below 20
+GPWFEST2,30,ok,,,,VGPT2G,47,8640,0,0.0,0,,,False,positive_intervals below 20
+GOESF1,30,ok,,,,VGET1G,133,8640,0,0.0,0,,,False,positive_intervals below 20
+WAMBOWF2,30,ok,,,,QDMR1W,14,6096,4,0.0006561679790026247,1,2026-04-29 09:25:00,2026-04-29 09:40:00,False,positive_intervals below 20
+WAMBOWF1,30,ok,,,,QDMW1W,29,8640,0,0.0,0,,,False,positive_intervals below 20
+ARWF1,30,ok,,,,VART1A,191,8640,0,0.0,0,,,False,positive_intervals below 20
+GPWFEST1,30,ok,,,,VGPT1G,47,8640,0,0.0,0,,,False,positive_intervals below 20
+GPWFEST3,30,ok,,,,VGPT3G,47,8640,0,0.0,0,,,False,positive_intervals below 20
+OAKEY1SF,30,ok,,,,QTKS1O,15,8640,0,0.0,0,,,False,positive_intervals below 20
+MUWAWF1,30,ok,,,,VMRT1M,282,8640,0,0.0,0,,,False,positive_intervals below 20
+LIMOSF11,30,ok,,,,NBSF1L,1071,8640,0,0.0,0,,,False,positive_intervals below 20
+COLWF01,30,ok,,,,NCLW1C,474,8640,0,0.0,0,,,False,positive_intervals below 20
+RYANCWF1,30,ok,,,,VTR31R,111,8640,0,0.0,0,,,False,positive_intervals below 20
+BULGANA1,30,ok,,,,VBGT1B,221,8640,0,0.0,0,,,False,positive_intervals below 20
+MUWAWF2,30,ok,,,,VMRT2M,282,8640,0,0.0,0,,,False,positive_intervals below 20
+STUBSF1,30,ok,,,,NSTB1S,209,8640,0,0.0,0,,,False,positive_intervals below 20
+GSWF1A,30,ok,,,,SROB1G,87,8640,5,0.0005787037037037037,1,2026-04-23 07:45:00,2026-04-23 08:05:00,False,positive_intervals below 20
+PAREPW1,30,ok,,,,SDAP1P,87,8640,0,0.0,0,,,False,positive_intervals below 20
+GESF1,30,ok,,,,NJDA1G,257,8640,0,0.0,0,,,False,positive_intervals below 20
+KIAMSF1,30,ok,,,,VKMT1K,385,8640,0,0.0,0,,,False,positive_intervals below 20
+NEWENSF1,30,ok,,,,NURR1N,578,8640,0,0.0,0,,,False,positive_intervals below 20
+NEWENSF2,30,ok,,,,NURR2N,578,8640,0,0.0,0,,,False,positive_intervals below 20
+SUNRSF1,30,ok,,,,NBSF2S,1073,8640,0,0.0,0,,,False,positive_intervals below 20
+STUBSF2,30,ok,,,,NSTU1S,209,8640,0,0.0,0,,,False,positive_intervals below 20
+STWF1,30,ok,,,,NBKW1S,1136,8640,0,0.0,0,,,False,positive_intervals below 20
+GSWF1B1,30,ok,,,,SRAB1G,85,8640,0,0.0,0,,,False,positive_intervals below 20
+AVLSF1,30,ok,,,,NNRN1A,735,8640,0,0.0,0,,,False,positive_intervals below 20
+MEWF1,30,ok,,,,QWKM1M,247,8640,0,0.0,0,,,False,positive_intervals below 20
+WOOLGSF1,30,ok,,,,QWLS1W,127,8640,0,0.0,0,,,False,positive_intervals below 20
+BRYB1WF1,30,ok,,,,VBBT1B,140,8640,0,0.0,0,,,False,positive_intervals below 20
+DULAWF1,30,ok,,,,QCBF1D,29,8640,0,0.0,0,,,False,positive_intervals below 20
+WRWF1,30,ok,,,,NWRK1W,508,8640,0,0.0,0,,,False,positive_intervals below 20
+WELLSF1,30,ok,,,,NWLS4W,439,8640,0,0.0,0,,,False,positive_intervals below 20
+DUNDWF1,30,ok,,,,VM051D,55,8640,0,0.0,0,,,False,positive_intervals below 20
+MCINTYR1,60,ok,,,,QMSW1M,27,17280,0,0.0,0,,,False,positive_intervals below 20
+STOCKYD1,60,ok,,,,VHGT1S,47,17280,0,0.0,0,,,False,positive_intervals below 20
+COOPGWF1,60,ok,,,,QCPG1C,29,17280,0,0.0,0,,,False,positive_intervals below 20
+MACARTH1,60,ok,,,,VTRT1M,111,17280,0,0.0,0,,,False,positive_intervals below 20
+WDGPH1,60,ok,,,,QWDR1W,29,17280,0,0.0,0,,,False,positive_intervals below 20
+ALDGASF1,60,ok,,,,QLCS1A,208,17280,0,0.0,0,,,False,positive_intervals below 20
+RYEPARK1,60,ok,,,,NRPK1R,501,17280,0,0.0,0,,,False,positive_intervals below 20
+CUSF1,60,ok,,,,NCRN1C,258,17280,0,0.0,0,,,False,positive_intervals below 20
+CLRKCWF1,60,ok,,,,QBSW1C,208,17280,0,0.0,0,,,False,positive_intervals below 20
+WELNSF1,60,ok,,,,NWLN1W,447,17280,2,0.00011574074074074075,1,2026-04-28 07:30:00,2026-04-28 07:35:00,False,positive_intervals below 20
+MOORAWF1,60,ok,,,,VELT2M,139,17280,0,0.0,0,,,False,positive_intervals below 20
+GPWFWST2,60,ok,,,,VGP22G,47,17280,0,0.0,0,,,False,positive_intervals below 20
+BRDDSF01,60,ok,,,,QBSS1B,196,17280,0,0.0,0,,,False,positive_intervals below 20
+WOLARSF1,60,ok,,,,NWOW1W,436,17280,0,0.0,0,,,False,positive_intervals below 20
+DARLSF1,60,ok,,,,NDNS1D,842,17280,0,0.0,0,,,False,positive_intervals below 20
+SAPHWF1,60,ok,,,,NSAP1S,822,17280,0,0.0,0,,,False,positive_intervals below 20
+GPWFWST1,60,ok,,,,VGP21G,47,17280,0,0.0,0,,,False,positive_intervals below 20
+GPWFEST2,60,ok,,,,VGPT2G,47,17280,0,0.0,0,,,False,positive_intervals below 20
+GOESF1,60,ok,,,,VGET1G,133,17280,0,0.0,0,,,False,positive_intervals below 20
+WAMBOWF2,60,ok,,,,QDMR1W,14,6096,4,0.0006561679790026247,1,2026-04-29 09:25:00,2026-04-29 09:40:00,False,positive_intervals below 20
+WAMBOWF1,60,ok,,,,QDMW1W,29,17280,0,0.0,0,,,False,positive_intervals below 20
+ARWF1,60,ok,,,,VART1A,191,17280,0,0.0,0,,,False,positive_intervals below 20
+GPWFEST1,60,ok,,,,VGPT1G,47,17280,0,0.0,0,,,False,positive_intervals below 20
+GPWFEST3,60,ok,,,,VGPT3G,47,17280,0,0.0,0,,,False,positive_intervals below 20
+OAKEY1SF,60,ok,,,,QTKS1O,15,17280,0,0.0,0,,,False,positive_intervals below 20
+MUWAWF1,60,ok,,,,VMRT1M,282,17280,0,0.0,0,,,False,positive_intervals below 20
+LIMOSF11,60,ok,,,,NBSF1L,1071,17280,0,0.0,0,,,False,positive_intervals below 20
+COLWF01,60,ok,,,,NCLW1C,474,17280,0,0.0,0,,,False,positive_intervals below 20
+RYANCWF1,60,ok,,,,VTR31R,111,17280,0,0.0,0,,,False,positive_intervals below 20
+BULGANA1,60,ok,,,,VBGT1B,221,17280,9,0.0005208333333333333,2,2026-04-16 06:30:00,2026-04-17 06:50:00,False,positive_intervals below 20
+MUWAWF2,60,ok,,,,VMRT2M,282,17280,0,0.0,0,,,False,positive_intervals below 20
+STUBSF1,60,ok,,,,NSTB1S,209,17280,0,0.0,0,,,False,positive_intervals below 20
+GSWF1A,60,ok,,,,SROB1G,87,17280,5,0.00028935185185185184,1,2026-04-23 07:45:00,2026-04-23 08:05:00,False,positive_intervals below 20
+PAREPW1,60,ok,,,,SDAP1P,87,17280,0,0.0,0,,,False,positive_intervals below 20
+GESF1,60,ok,,,,NJDA1G,257,17280,0,0.0,0,,,False,positive_intervals below 20
+KIAMSF1,60,ok,,,,VKMT1K,385,17280,0,0.0,0,,,False,positive_intervals below 20
+NEWENSF1,60,ok,,,,NURR1N,578,17280,0,0.0,0,,,False,positive_intervals below 20
+NEWENSF2,60,ok,,,,NURR2N,578,17280,0,0.0,0,,,False,positive_intervals below 20
+SUNRSF1,60,ok,,,,NBSF2S,1073,17280,0,0.0,0,,,False,positive_intervals below 20
+STUBSF2,60,ok,,,,NSTU1S,209,17280,0,0.0,0,,,False,positive_intervals below 20
+STWF1,60,ok,,,,NBKW1S,1136,17280,0,0.0,0,,,False,positive_intervals below 20
+GSWF1B1,60,ok,,,,SRAB1G,85,17280,0,0.0,0,,,False,positive_intervals below 20
+AVLSF1,60,ok,,,,NNRN1A,735,17280,0,0.0,0,,,False,positive_intervals below 20
+MEWF1,60,ok,,,,QWKM1M,247,17280,2,0.00011574074074074075,1,2026-04-15 07:30:00,2026-04-15 07:40:00,False,positive_intervals below 20
+WOOLGSF1,60,ok,,,,QWLS1W,127,17280,5,0.00028935185185185184,2,2026-04-13 12:05:00,2026-04-14 11:30:00,False,positive_intervals below 20
+BRYB1WF1,60,ok,,,,VBBT1B,140,17280,0,0.0,0,,,False,positive_intervals below 20
+DULAWF1,60,ok,,,,QCBF1D,29,17280,0,0.0,0,,,False,positive_intervals below 20
+WRWF1,60,ok,,,,NWRK1W,508,17280,0,0.0,0,,,False,positive_intervals below 20
+WELLSF1,60,ok,,,,NWLS4W,439,17280,0,0.0,0,,,False,positive_intervals below 20
+DUNDWF1,60,ok,,,,VM051D,55,17280,0,0.0,0,,,False,positive_intervals below 20
