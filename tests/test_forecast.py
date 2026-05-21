@@ -7,7 +7,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.aemo_constraint_demo import forecast as forecast_module
 from src.aemo_constraint_demo.forecast import (
+    FALLBACK_WEATHER_WARNING,
     forecast_from_bundle,
     future_intervals,
     planned_constraints_for_intervals,
@@ -96,6 +98,102 @@ def test_forecast_from_bundle_returns_probability_rows(tmp_path: Path) -> None:
     assert result["forecast"][0]["ml_constraint_probability"] == 0.73
     assert result["forecast"][0]["ml_predicted_constrained"] is True
     assert result["forecast"][0]["risk_level"] == "high"
+    assert result["weather_source"] == "not_used_no_weather_bundle"
+    assert result["weather_warning"] is None
+
+
+def test_forecast_from_bundle_use_live_weather_false_skips_open_meteo(tmp_path: Path, monkeypatch) -> None:
+    model_path = tmp_path / "model.joblib"
+    joblib.dump(
+        {
+            "model": ConstantProbabilityModel(0.33),
+            "feature_columns": [
+                "hour_sin",
+                "hour_cos",
+                "dow_sin",
+                "dow_cos",
+                "month_sin",
+                "month_cos",
+                "is_weekend",
+                "temperature_2m",
+                "relative_humidity_2m",
+            ],
+            "duid": "D1",
+            "connection_point": "CP1",
+            "latitude": -27.4,
+            "longitude": 151.7,
+            "relevant_genconids": ["C1"],
+            "planned_genconset": pd.DataFrame(),
+            "planned_genconsetinvoke": pd.DataFrame(),
+            "metrics": {"rows": 10},
+            "horizon_hours": 1,
+            "target_column": "target_constrained_next_1h",
+            "no_weather": False,
+        },
+        model_path,
+    )
+
+    def fail_if_called(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise AssertionError("Open-Meteo should not be called when use_live_weather=False")
+
+    monkeypatch.setattr(forecast_module, "fetch_open_meteo_forecast", fail_if_called)
+
+    result = forecast_from_bundle(
+        model_path,
+        duid="D1",
+        horizon_hours=1,
+        start="2026-05-01 08:00:00",
+        use_live_weather=False,
+    )
+
+    assert len(result["forecast"]) == 12
+    assert result["forecast"][0]["probability"] == 0.33
+    assert result["weather_source"] == "fallback_imputed"
+    assert result["weather_warning"] == FALLBACK_WEATHER_WARNING
+
+
+def test_forecast_from_bundle_falls_back_when_open_meteo_fails(tmp_path: Path, monkeypatch) -> None:
+    model_path = tmp_path / "model.joblib"
+    joblib.dump(
+        {
+            "model": ConstantProbabilityModel(0.44),
+            "feature_columns": [
+                "hour_sin",
+                "hour_cos",
+                "dow_sin",
+                "dow_cos",
+                "month_sin",
+                "month_cos",
+                "is_weekend",
+                "temperature_2m",
+                "relative_humidity_2m",
+            ],
+            "duid": "D1",
+            "connection_point": "CP1",
+            "latitude": -27.4,
+            "longitude": 151.7,
+            "relevant_genconids": ["C1"],
+            "planned_genconset": pd.DataFrame(),
+            "planned_genconsetinvoke": pd.DataFrame(),
+            "metrics": {"rows": 10},
+            "horizon_hours": 1,
+            "target_column": "target_constrained_next_1h",
+            "no_weather": False,
+        },
+        model_path,
+    )
+
+    def raise_open_meteo_error(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise RuntimeError("Open-Meteo unavailable")
+
+    monkeypatch.setattr(forecast_module, "fetch_open_meteo_forecast", raise_open_meteo_error)
+
+    result = forecast_from_bundle(model_path, duid="D1", horizon_hours=1, start="2026-05-01 08:00:00")
+
+    assert len(result["forecast"]) == 12
+    assert result["forecast"][0]["probability"] == 0.44
+    assert result["weather_source"] == "fallback_imputed"
+    assert result["weather_warning"] == FALLBACK_WEATHER_WARNING
 
 
 def test_forecast_from_bundle_infers_model_horizon_when_omitted(tmp_path: Path) -> None:

@@ -6,3 +6,4 @@ __pycache__/
 data/cache/
 artifacts/*.joblib
 artifacts/*.pkl
+!artifacts/cathrock_6h_best_model.joblib

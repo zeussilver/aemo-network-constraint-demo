@@ -1,6 +1,7 @@
 """Forecast/query helpers for the AEMO constraint demo."""
 from __future__ import annotations
 
+import warnings
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -10,6 +11,9 @@ import pandas as pd
 
 from .features import add_time_features, numericise_feature_columns
 from .weather import fetch_open_meteo_forecast, merge_weather_to_intervals
+
+
+FALLBACK_WEATHER_WARNING = "Open-Meteo forecast unavailable; weather features were imputed."
 
 
 def _next_5min_timestamp(timezone: str = "Australia/Melbourne") -> pd.Timestamp:
@@ -106,6 +110,7 @@ def forecast_from_bundle(
     horizon_hours: int | None = None,
     start: str | None = None,
     timezone: str = "Australia/Melbourne",
+    use_live_weather: bool = True,
 ) -> dict:
     bundle = joblib.load(model_path)
     trained_duid = str(bundle["duid"]).upper()
@@ -129,10 +134,27 @@ def forecast_from_bundle(
 
     intervals = future_intervals(horizon_hours=resolved_horizon, start=start, timezone=timezone)
     features = add_time_features(intervals)
+    weather_source = "not_used_no_weather_bundle" if bundle.get("no_weather", False) else "fallback_imputed"
+    weather_warning = None
     if not bundle.get("no_weather", False):
-        forecast_days = max(1, min(16, int(resolved_horizon / 24) + 2))
-        weather = fetch_open_meteo_forecast(bundle["latitude"], bundle["longitude"], forecast_days=forecast_days, timezone=timezone)
-        features = merge_weather_to_intervals(features, weather)
+        if use_live_weather:
+            try:
+                forecast_days = max(1, min(16, int(resolved_horizon / 24) + 2))
+                weather = fetch_open_meteo_forecast(
+                    bundle["latitude"],
+                    bundle["longitude"],
+                    forecast_days=forecast_days,
+                    timezone=timezone,
+                )
+                features = merge_weather_to_intervals(features, weather)
+                if weather.empty:
+                    weather_warning = FALLBACK_WEATHER_WARNING
+                else:
+                    weather_source = "live_open_meteo"
+            except Exception:  # noqa: BLE001
+                weather_warning = FALLBACK_WEATHER_WARNING
+        else:
+            weather_warning = FALLBACK_WEATHER_WARNING
 
     feature_cols = list(bundle["feature_columns"])
     for col in feature_cols:
@@ -140,7 +162,9 @@ def forecast_from_bundle(
             features[col] = pd.NA
     features = numericise_feature_columns(features, feature_cols)
 
-    scores = bundle["model"].predict_proba(features[feature_cols])[:, 1]
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning, module=r"sklearn\..*")
+        scores = bundle["model"].predict_proba(features[feature_cols])[:, 1]
     planned = planned_constraints_for_intervals(bundle, intervals)
 
     rows = []
@@ -181,6 +205,8 @@ def forecast_from_bundle(
         "model_trained_at_utc": bundle.get("trained_at_utc"),
         "model": model_metadata,
         "model_metrics": metrics,
+        "weather_source": weather_source,
+        "weather_warning": weather_warning,
         "relevant_genconids": relevant,
         "relevant_genconids_count": len(relevant),
         "planned_constraints_source": "GENCONSETINVOKE relevant-set proxy when available",

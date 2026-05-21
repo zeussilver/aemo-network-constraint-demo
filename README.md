@@ -10,6 +10,20 @@ It uses AEMO public NEMWeb data for dispatch labels and constraint mapping, adds
 
 ---
 
+## Demo result
+
+- Selected target: `CATHROCK`
+- Selected horizon: `6h`
+- Best model: `logistic_regression` with `time_weather_dispatch_lag` features
+- Mean event-window AP: `0.615064`
+- Mean precision@top 5%: `0.633333`
+- Mean lift@top 5%: `1.944939`
+- Mean ROC AUC: `0.618640`
+
+This is a workflow demo, not a production forecast model. The event-window folds are sparse, the chronological holdout has no positive `CATHROCK` 6h labels, and P5MIN/Predispatch, outage, regional demand, and interconnector inputs are future extensions.
+
+---
+
 ## Why this maps to the internship brief
 
 The internship brief asks for a service that can be queried for a `DUID` and return planned AEMO constraints plus ML-forecast constraints.
@@ -30,8 +44,8 @@ This demo implements a minimum viable version:
    - Phase 2 trains against a future-only horizon label for the selected DUID.
 
 4. **ML forecast model**
-   - Features: time-of-day, day-of-week, month, weekend flag, and weather.
-   - Default model: balanced logistic regression for speed and explainability.
+   - Features: time-of-day, day-of-week, month, weekend flag, weather, and current-or-past dispatch lag signals.
+   - Selected Phase 3 model: logistic regression for speed and explainability.
 
 5. **Queryable service**
    - `GET /forecast/{duid}` returns ML probabilities and a lightweight planned/invoked-constraint view.
@@ -95,15 +109,21 @@ This is intentionally simple and auditable. The real production version should r
 ├── README.md
 ├── requirements.txt
 ├── app.py
+├── application/
+│   ├── interview_talking_points.md
+│   ├── project_summary.md
+│   └── resume_bullets.md
 ├── notebooks/
 │   └── aemo_constraint_forecast_demo.ipynb
 ├── scripts/
+│   ├── benchmark_models.py
 │   ├── backtest_horizon_model.py
 │   └── find_constrained_duids.py
 ├── tests/
 │   ├── test_aemo_client.py
 │   ├── test_api.py
 │   ├── test_backtest.py
+│   ├── test_benchmark_models.py
 │   ├── test_features.py
 │   ├── test_forecast.py
 │   ├── test_notebook_readme.py
@@ -129,7 +149,15 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Train the Phase 2 demo model
+### 2. Use or regenerate the selected model
+
+The final API example uses the small Phase 3 best-model bundle:
+
+```text
+artifacts/cathrock_6h_best_model.joblib
+```
+
+If that bundle is missing, regenerate it with the Phase 3 benchmark command in the performance section below. For a simpler training smoke test, run:
 
 ```bash
 python -m src.aemo_constraint_demo.train \
@@ -391,13 +419,22 @@ Coverage focus:
 uvicorn app:app --reload
 ```
 
-Query:
+Online forecast query:
 
 ```bash
 curl "http://127.0.0.1:8000/forecast/CATHROCK?model_path=artifacts/cathrock_6h_best_model.joblib"
 ```
 
-The API infers `horizon_hours=6` from the model bundle when the query parameter is omitted.
+Offline-safe demo forecast:
+
+```bash
+curl "http://127.0.0.1:8000/forecast/CATHROCK?model_path=artifacts/cathrock_6h_best_model.joblib&use_live_weather=false"
+```
+
+The API infers `horizon_hours=6` from the model bundle when the query parameter is omitted. By default it uses live
+Open-Meteo forecast weather when available. If live weather is disabled or unavailable, the demo still returns a forecast
+by leaving weather features missing and letting the model pipeline impute them. This keeps the GitHub demo reproducible
+without internet access.
 
 Explicit horizon also works:
 
@@ -420,6 +457,8 @@ Example response shape:
     "target_column": "target_constrained_next_6h",
     "positive_rate": 0.013249651324965132
   },
+  "weather_source": "fallback_imputed",
+  "weather_warning": "Open-Meteo forecast unavailable; weather features were imputed.",
   "relevant_genconids_count": 103,
   "forecast": [
     {
@@ -489,21 +528,17 @@ For a stronger production version, add:
 
 ## Known limitations
 
-1. **Network-vs-system classification is simplified.**  
-   This demo treats DUID-relevant generic constraints as the target class. A production build should classify network constraints more carefully.
+1. **Network-vs-system classification is simplified.** This demo treats DUID-relevant generic constraints as the target class. A production build should classify network constraints more carefully.
 
 2. **Geospatial metadata is tiny.**
    Phase 2 includes a vetted `CATHROCK` row in `data/duid_coordinates.csv`; production should maintain a complete
    DUID/station geospatial lookup.
 
-3. **One model per DUID.**  
-   The service is intentionally narrow. Multi-DUID modelling would use a shared feature store and add DUID embeddings or categorical features.
+3. **One model per DUID.** The service is intentionally narrow. Multi-DUID modelling would use a shared feature store and add DUID embeddings or categorical features.
 
-4. **Short training window.**  
-   Recent rolling files are enough for a demo. Production should use long historical windows, outage context, seasonality, and backtesting.
+4. **Short training window.** Recent rolling files are enough for a demo. Production should use long historical windows, outage context, seasonality, and backtesting.
 
-5. **Forecast features are minimal.**  
-   Default query-time features are time and weather. Production should add AEMO forecast demand, regional/interconnector forecasts, UIGF, outage schedules, and P5MIN/Predispatch inputs.
+5. **Forecast features are minimal.** Default query-time features are time and weather. Production should add AEMO forecast demand, regional/interconnector forecasts, UIGF, outage schedules, and P5MIN/Predispatch inputs.
 
 6. **Evaluation remains sparse-event limited.**
    The chronological holdout has no positive `CATHROCK` 6h labels. Event-window folds are a transparent supplement, not

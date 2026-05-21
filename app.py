@@ -24,6 +24,7 @@ def forecast_duid(
     horizon_hours: int | None = Query(default=None, ge=1, le=72),
     model_path: str = Query(default="artifacts/model.joblib"),
     start: str | None = Query(default=None, description="Optional start timestamp, e.g. 2026-05-20 08:00"),
+    use_live_weather: bool = Query(default=True),
 ) -> dict:
     path = Path(model_path)
     if not path.exists():
@@ -36,6 +37,12 @@ def forecast_duid(
             ),
         )
     try:
-        return forecast_from_bundle(path, duid=duid, horizon_hours=horizon_hours, start=start)
+        return forecast_from_bundle(
+            path,
+            duid=duid,
+            horizon_hours=horizon_hours,
+            start=start,
+            use_live_weather=use_live_weather,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
