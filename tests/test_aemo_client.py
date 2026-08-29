@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from src.aemo_constraint_demo import aemo_client
 
@@ -167,3 +168,72 @@ def test_load_next_day_dispatch_tables_concatenates_non_empty_tables(tmp_path: P
 
     assert tables["DISPATCHLOAD"]["DUID"].tolist() == ["D1", "D2"]
     assert tables["DISPATCHCONSTRAINT"]["CONSTRAINTID"].tolist() == ["C1"]
+
+
+def _write_dispatch_cache(tmp_path: Path, dates: list[str]) -> list[Path]:
+    return [_write_zip(tmp_path / f"PUBLIC_NEXT_DAY_DISPATCH_{date}_0001.zip", {"x.csv": "C"}) for date in dates]
+
+
+def test_list_cached_next_day_dispatch_files_sorts_by_trading_date(tmp_path: Path) -> None:
+    _write_dispatch_cache(tmp_path, ["20260518", "20260516", "20260517"])
+    _write_zip(tmp_path / "PUBLIC_OTHER_REPORT.zip", {"x.csv": "C"})
+
+    cached = aemo_client.list_cached_next_day_dispatch_files(tmp_path)
+
+    assert [date.strftime("%Y%m%d") for date, _ in cached] == ["20260516", "20260517", "20260518"]
+
+
+def test_next_day_dispatch_paths_prefers_cache_and_honours_end_date(tmp_path: Path, monkeypatch) -> None:
+    _write_dispatch_cache(tmp_path, ["20260516", "20260517", "20260518"])
+
+    def fail(**kwargs):
+        raise AssertionError("cached windows must not hit NEMWeb")
+
+    monkeypatch.setattr(aemo_client, "download_latest_next_day_dispatch", fail)
+
+    paths = aemo_client.next_day_dispatch_paths(2, cache_dir=tmp_path, source="auto")
+    assert [path.name[-17:-9] for path in paths] == ["20260517", "20260518"]
+
+    bounded = aemo_client.next_day_dispatch_paths(2, cache_dir=tmp_path, source="cache", end_date="2026-05-17")
+    assert [path.name[-17:-9] for path in bounded] == ["20260516", "20260517"]
+
+
+def test_next_day_dispatch_paths_downloads_when_cache_is_short(tmp_path: Path, monkeypatch) -> None:
+    _write_dispatch_cache(tmp_path, ["20260518"])
+    downloaded = [tmp_path / "downloaded.zip"]
+    monkeypatch.setattr(aemo_client, "download_latest_next_day_dispatch", lambda **kwargs: downloaded)
+
+    assert aemo_client.next_day_dispatch_paths(3, cache_dir=tmp_path, source="auto") == downloaded
+
+    with pytest.raises(RuntimeError, match="source='network'"):
+        aemo_client.next_day_dispatch_paths(3, cache_dir=tmp_path / "empty", source="cache")
+
+
+def test_find_cached_monthly_table_picks_latest_and_exact_table(tmp_path: Path) -> None:
+    for name in (
+        "PUBLIC_ARCHIVE%23GENCONSET%23FILE01%23202603010000.zip",
+        "PUBLIC_ARCHIVE%23GENCONSET%23FILE01%23202604010000.zip",
+        "PUBLIC_ARCHIVE%23GENCONSETINVOKE%23FILE01%23202605010000.zip",
+    ):
+        _write_zip(tmp_path / name, {"x.csv": "C"})
+
+    found = aemo_client.find_cached_monthly_table("GENCONSET", cache_dir=tmp_path)
+
+    assert found is not None
+    assert found.name == "PUBLIC_ARCHIVE%23GENCONSET%23FILE01%23202604010000.zip"
+    assert aemo_client.find_cached_monthly_table("DUDETAIL", cache_dir=tmp_path) is None
+
+
+def test_read_monthly_table_cached_first_skips_the_network(tmp_path: Path, monkeypatch) -> None:
+    body = "C,meta\nI,DUDETAIL,x,1,DUID\nD,DUDETAIL,x,1,CATHROCK\nC,END OF REPORT,3\n"
+    csv_path = tmp_path / "PUBLIC_ARCHIVE%23DUDETAIL%23FILE01%23202604010000.zip"
+    _write_zip(csv_path, {"DUDETAIL.CSV": body})
+
+    def fail(*args, **kwargs):
+        raise AssertionError("cached tables must not hit NEMWeb")
+
+    monkeypatch.setattr(aemo_client, "read_monthly_table", fail)
+
+    table = aemo_client.read_monthly_table_cached_first("DUDETAIL", cache_dir=tmp_path)
+
+    assert table["DUID"].tolist() == ["CATHROCK"]

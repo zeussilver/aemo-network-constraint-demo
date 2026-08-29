@@ -27,6 +27,8 @@ HEADERS = {
     "User-Agent": "aemo-constraint-forecast-demo/0.1 (educational demo; respectful serial downloads)"
 }
 
+DISPATCH_SOURCE_CHOICES = ("auto", "cache", "network")
+
 TABLE_ALIASES = {
     # Current Next Day Dispatch files expose the historical DISPATCHLOAD-style
     # unit dispatch solution as DISPATCH,UNIT_SOLUTION.
@@ -183,17 +185,23 @@ class NextDayDispatchFile:
     url: str
 
 
+def next_day_dispatch_trading_date(filename: str) -> pd.Timestamp | None:
+    """Return the trading date encoded in a Next Day Dispatch filename."""
+    match = re.search(r"PUBLIC_NEXT_DAY_DISPATCH_(\d{8})(?:_|\.zip)", unquote(str(filename)))
+    if not match:
+        return None
+    return pd.to_datetime(match.group(1), format="%Y%m%d")
+
+
 def list_next_day_dispatch_files() -> list[NextDayDispatchFile]:
     """List current rolling-window Next Day Dispatch files."""
     directory_url = f"{NEMWEB_BASE}/Reports/CURRENT/Next_Day_Dispatch/"
     urls = list_zip_links(directory_url)
     files: list[NextDayDispatchFile] = []
     for url in urls:
-        filename = unquote(Path(urlparse(url).path).name)
-        match = re.search(r"PUBLIC_NEXT_DAY_DISPATCH_(\d{8})(?:_|\.zip)", filename)
-        if not match:
+        date = next_day_dispatch_trading_date(Path(urlparse(url).path).name)
+        if date is None:
             continue
-        date = pd.to_datetime(match.group(1), format="%Y%m%d")
         files.append(NextDayDispatchFile(trading_date=date, url=url))
     return sorted(files, key=lambda item: item.trading_date)
 
@@ -212,6 +220,101 @@ def download_latest_next_day_dispatch(
     if not selected:
         raise RuntimeError("No Next Day Dispatch files found in the current rolling window.")
     return [download_file(item.url, cache_dir=cache_dir) for item in selected]
+
+
+def list_cached_next_day_dispatch_files(
+    cache_dir: str | Path = "data/cache",
+) -> list[tuple[pd.Timestamp, Path]]:
+    """List already-downloaded Next Day Dispatch files, oldest trading date first."""
+    cache_dir = Path(cache_dir)
+    if not cache_dir.is_dir():
+        return []
+    items: list[tuple[pd.Timestamp, Path]] = []
+    for path in cache_dir.glob("PUBLIC_NEXT_DAY_DISPATCH_*.zip"):
+        date = next_day_dispatch_trading_date(path.name)
+        if date is not None:
+            items.append((date, path))
+    return sorted(items, key=lambda item: item[0])
+
+
+def next_day_dispatch_paths(
+    days: int,
+    cache_dir: str | Path = "data/cache",
+    end_date: str | None = None,
+    source: str = "network",
+) -> list[Path]:
+    """Resolve local paths for the latest N Next Day Dispatch trading days.
+
+    ``source`` controls where the files come from:
+      - ``"cache"``: local cache only, never touch NEMWeb;
+      - ``"network"``: always list and download from NEMWeb (cached downloads are reused);
+      - ``"auto"``: use the cache when it already covers the window, otherwise download.
+    """
+    if source not in DISPATCH_SOURCE_CHOICES:
+        raise ValueError(f"Unknown source {source!r}. Choose one of {list(DISPATCH_SOURCE_CHOICES)}.")
+    days = int(days)
+    if days <= 0:
+        raise ValueError("days must be positive.")
+
+    if source in {"auto", "cache"}:
+        cached = list_cached_next_day_dispatch_files(cache_dir)
+        if end_date is not None:
+            end_ts = pd.to_datetime(end_date)
+            cached = [item for item in cached if item[0] <= end_ts]
+        selected = cached[-days:]
+        if len(selected) >= days or (source == "cache" and selected):
+            return [path for _, path in selected]
+        if source == "cache":
+            raise RuntimeError(
+                f"No cached Next Day Dispatch files found in {Path(cache_dir)}. "
+                "Re-run with source='auto' or source='network' to download from NEMWeb."
+            )
+    return download_latest_next_day_dispatch(days=days, cache_dir=cache_dir, end_date=end_date)
+
+
+def find_cached_monthly_table(table: str, cache_dir: str | Path = "data/cache") -> Path | None:
+    """Return the most recent cached monthly MMSDM table ZIP, if one was downloaded."""
+    cache_dir = Path(cache_dir)
+    if not cache_dir.is_dir():
+        return None
+    table = str(table).upper()
+    candidates: list[tuple[str, Path]] = []
+    for path in cache_dir.glob("*.zip"):
+        # Cached archive names keep AEMO's "#" separators, sometimes still percent-encoded.
+        name = unquote(path.name).upper()
+        match = re.search(rf"(?:ARCHIVE|DVD)\W*{table}\W.*?(\d{{12}})\.ZIP$", name)
+        if match:
+            candidates.append((match.group(1), path))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def read_monthly_table_cached_first(
+    table: str,
+    year: int | None = None,
+    month: int | None = None,
+    cache_dir: str | Path = "data/cache",
+    source: str = "auto",
+) -> pd.DataFrame:
+    """Read a monthly MMSDM standing-data table, preferring an already-cached month.
+
+    Standing-data tables change slowly, so an offline demo can reuse whichever month
+    was downloaded previously instead of asking NEMWeb for the latest archive.
+    """
+    if source not in DISPATCH_SOURCE_CHOICES:
+        raise ValueError(f"Unknown source {source!r}. Choose one of {list(DISPATCH_SOURCE_CHOICES)}.")
+
+    if source in {"auto", "cache"} and year is None and month is None:
+        cached = find_cached_monthly_table(table, cache_dir=cache_dir)
+        if cached is not None:
+            return read_single_table_zip(cached)
+        if source == "cache":
+            raise RuntimeError(
+                f"No cached monthly {str(table).upper()} archive found in {Path(cache_dir)}. "
+                "Re-run with source='auto' or source='network' to download from NEMWeb."
+            )
+    return read_monthly_table(table, year=year, month=month, cache_dir=cache_dir)
 
 
 def _iter_csv_payloads_from_zip_bytes(data: bytes, depth: int = 0) -> Iterable[bytes]:
@@ -328,9 +431,10 @@ def load_next_day_dispatch_tables(
     table_names: Iterable[str],
     cache_dir: str | Path = "data/cache",
     end_date: str | None = None,
+    source: str = "network",
 ) -> dict[str, pd.DataFrame]:
     """Download recent Next Day Dispatch files and return concatenated requested tables."""
-    paths = download_latest_next_day_dispatch(days=days, cache_dir=cache_dir, end_date=end_date)
+    paths = next_day_dispatch_paths(days=days, cache_dir=cache_dir, end_date=end_date, source=source)
     chunks: dict[str, list[pd.DataFrame]] = {table.upper(): [] for table in table_names}
     for path in paths:
         parsed = parse_multitable_zip(path, table_names=chunks.keys())
