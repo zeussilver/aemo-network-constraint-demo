@@ -266,3 +266,45 @@ def test_forecast_reports_missing_dispatch_history(tmp_path: Path, monkeypatch) 
 
     with pytest.raises(ValueError, match="No DISPATCHLOAD rows"):
         forecast_from_bundle(_write_bundle(tmp_path), duid="D1")
+
+
+class FixedProbabilityModel:
+    def __init__(self, probability: float) -> None:
+        self.probability = probability
+
+    def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
+        positive = np.full(len(features), self.probability)
+        return np.column_stack([1 - positive, positive])
+
+
+def test_forecast_returns_a_forward_risk_curve_for_a_lead_time_bundle(tmp_path: Path, offline_nemweb) -> None:
+    probabilities = {1: 0.05, 2: 0.4, 3: 0.9}
+    path = _write_bundle(
+        tmp_path,
+        horizon_hours=3,
+        lead_models={lead: FixedProbabilityModel(p) for lead, p in probabilities.items()},
+        lead_hours=[1, 2, 3],
+        lead_bucket_hours=1,
+    )
+
+    result = forecast_from_bundle(path, duid="D1")
+    curve = result["risk_curve"]
+
+    assert [bucket["lead_hours"] for bucket in curve] == [1, 2, 3]
+    assert [bucket["probability"] for bucket in curve] == [0.05, 0.4, 0.9]
+    assert [bucket["risk_level"] for bucket in curve] == ["low", "medium", "high"]
+    # Buckets tile the horizon: each starts where the previous ended.
+    assert pd.Timestamp(curve[0]["window_start"]) == LAST_INTERVAL
+    assert curve[0]["window_end"] == curve[1]["window_start"]
+    assert pd.Timestamp(curve[-1]["window_end"]) == LAST_INTERVAL + pd.Timedelta(hours=3)
+    assert result["peak_lead"]["lead_hours"] == 3
+    assert result["peak_lead"]["probability"] == 0.9
+    assert result["model"]["lead_hours"] == [1, 2, 3]
+
+
+def test_forecast_omits_the_risk_curve_for_a_single_horizon_bundle(tmp_path: Path, offline_nemweb) -> None:
+    result = forecast_from_bundle(_write_bundle(tmp_path), duid="D1")
+
+    assert result["risk_curve"] == []
+    assert result["peak_lead"] is None
+    assert result["model"]["lead_hours"] is None

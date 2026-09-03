@@ -20,7 +20,15 @@ It uses AEMO public NEMWeb data for dispatch labels and constraint mapping, adds
 - Mean lift@top 5%: `1.944939`
 - Mean ROC AUC: `0.618640`
 
-This is a workflow demo, not a production forecast model. The event-window folds are sparse, the chronological holdout has no positive `CATHROCK` 6h labels, and P5MIN/Predispatch, outage, regional demand, and interconnector inputs are future extensions.
+Lead-time buckets (Phase 6) split that horizon into per-hour windows. They deliver a forward risk
+curve, but every bucket scores far below the cumulative model — mean AP `0.09`–`0.17` against
+`0.60`, with `lift@top-5%` below `1.0`. The model can say a constraint is coming; it cannot say
+which hour.
+
+This is a workflow demo, not a production forecast model. The event-window folds are sparse — the
+60-day window contains only 3 binding events — the chronological holdout has no positive `CATHROCK`
+6h labels, and P5MIN/Predispatch, outage, regional demand, and interconnector inputs are future
+extensions.
 
 ---
 
@@ -120,7 +128,8 @@ This is intentionally simple and auditable. The real production version should r
 ├── scripts/
 │   ├── benchmark_models.py
 │   ├── backtest_horizon_model.py
-│   └── find_constrained_duids.py
+│   ├── find_constrained_duids.py
+│   └── train_lead_time_models.py
 ├── tests/
 │   ├── test_aemo_client.py
 │   ├── test_api.py
@@ -129,6 +138,7 @@ This is intentionally simple and auditable. The real production version should r
 │   ├── test_features.py
 │   ├── test_forecast.py
 │   ├── test_frames.py
+│   ├── test_lead_time_models.py
 │   ├── test_mcp_server.py
 │   ├── test_notebook_readme.py
 │   ├── test_train.py
@@ -439,6 +449,87 @@ always used the correct frame. Two honest caveats remain: probabilities are clos
 `>0.9`), so treat them as a ranking signal rather than calibrated risk; and the origin trails real time by 4–28 hours
 because Next Day Dispatch publishes the previous trading day.
 
+### Phase 6: Lead-time buckets
+
+Phase 5 left one probability for the whole horizon, which cannot say *when* inside the window
+the risk sits. Phase 6 adds disjoint lead-time buckets that tile the horizon:
+
+```text
+target_constrained_lead_Xh(t) = 1 if a relevant constraint binds in (t+(X-1)h, t+Xh]
+```
+
+One model per bucket, all scored from the same origin with the same origin-anchored features, so
+a single call produces a forward curve without inventing feature values for future intervals. The
+bucket configuration reuses the Phase 3 winner rather than re-running the whole feature-set
+benchmark.
+
+```bash
+python scripts/train_lead_time_models.py \
+  --duid CATHROCK --days 60 --horizon-hours 6 --lead-hours 1 2 3 4 5 6 \
+  --source cache --end-date 2026-05-18 \
+  --feature-set time_weather_dispatch_lag --model-type logistic_regression \
+  --model-out artifacts/cathrock_lead_time_models.joblib \
+  --metrics-out artifacts/cathrock_lead_time_metrics.json \
+  --folds-out artifacts/cathrock_lead_time_folds.csv \
+  --report-out chatref/phase6_lead_time_report.md
+```
+
+Query it the same way as any other bundle; the response gains `risk_curve` and `peak_lead`:
+
+```bash
+curl "http://127.0.0.1:8000/forecast/CATHROCK?model_path=artifacts/cathrock_lead_time_models.joblib&source=cache"
+```
+
+#### Result: the model knows *whether*, not *when*
+
+| Target | Positives | Folds | Mean AP | Mean ROC AUC | Mean lift@top-5% |
+| --- | --- | --- | --- | --- | --- |
+| Cumulative `next_6h` | 228 | 2 | `0.6048` | `0.6085` | `1.8182` |
+| Bucket `lead_1h` | 48 | 2 | `0.1276` | `0.5699` | `0.5667` |
+| Bucket `lead_2h` | 48 | 2 | `0.1664` | `0.5350` | `0.5667` |
+| Bucket `lead_3h` | 48 | 2 | `0.0943` | `0.3747` | `0.5667` |
+| Bucket `lead_4h` | 48 | 2 | `0.1519` | `0.6248` | `0.5667` |
+| Bucket `lead_5h` | 48 | 2 | `0.1370` | `0.6554` | `0.5667` |
+| Bucket `lead_6h` | 48 | 2 | `0.1514` | `0.6776` | `0.5667` |
+
+Every bucket scores far below the cumulative model, and `lift@top-5%` under `1.0` means the
+highest-scoring intervals contain *fewer* events than a random slice would. Serving a replay makes
+the same point visually — anchored at `2026-04-23 04:00`, ahead of a constraint that really bound at
+06:20:
+
+```text
+lead 1h  04:00–05:00  p=0.8645  high
+lead 2h  05:00–06:00  p=0.9801  high
+lead 3h  06:00–07:00  p=0.9918  high   <- the window the event actually fell in
+lead 4h  07:00–08:00  p=0.9948  high   <- the curve's peak
+lead 5h  08:00–09:00  p=0.9836  high
+lead 6h  09:00–10:00  p=0.2804  medium
+```
+
+The curve is high across almost the whole horizon and peaks one bucket late. That is the honest
+finding: dispatch-lag features carry "conditions are constraint-prone", not "at hour k". Two causes
+are visible in the data and neither is fixable by better modelling alone — the 60-day window
+contains only **3 binding events** (14 dispatch intervals, all near 06:00 or 22:00), and bucket
+labels are 5x sparser than the cumulative label by construction. Only 2 of 3 candidate folds are
+evaluable, because nothing before the earliest event gives a two-class training split.
+
+The identical `0.5667` across buckets is small-sample quantisation, not a bug: top-5% of a 289-row
+window is ~15 rows, and every bucket lands exactly one true positive there. The per-bucket AP and
+ROC AUC do differ, and the fitted coefficients differ too.
+
+So the forward curve is delivered and structurally sound, but it should be read as *shape*, not as a
+calibrated timing forecast. Resolving timing needs the inputs a production build would have —
+P5MIN/Predispatch constraint solutions, outage schedules, and far more events than three.
+
+Phase 6 artifacts:
+
+```text
+artifacts/cathrock_lead_time_models.joblib
+artifacts/cathrock_lead_time_metrics.json
+artifacts/cathrock_lead_time_folds.csv
+chatref/phase6_lead_time_report.md
+```
+
 ### 3. Run tests
 
 The test suite is offline and uses synthetic AEMO-style ZIP payloads, mocked HTTP calls, and small in-memory training data.
@@ -456,6 +547,7 @@ Coverage focus:
 - baseline ML training bundle creation;
 - event-window backtest fold selection and safe rare-event metrics;
 - train/serve feature parity for a shared forecast origin;
+- lead-time bucket labels tiling the horizon without overlap;
 - forecast helper logic and FastAPI response/error paths;
 - MCP tool contracts, cache-first NEMWeb loading, and error messages.
 
@@ -575,7 +667,7 @@ the client can launch it from any working directory.
 | `aemo_list_duid_targets` | Which DUIDs have usable constraint labels, and which model bundles exist | `horizon_hours`, `recommended_only`, `limit` |
 | `aemo_get_duid_dispatch` | 5-minute cleared MW / availability history for a DUID | `duid`, `days`, `source`, `end_date`, `max_intervals` |
 | `aemo_get_duid_constraints` | The DUID's relevant `GENCONID`s, and which of them actually bound | `duid`, `days`, `source`, `include_binding_history`, `top_n` |
-| `aemo_forecast_duid_constraints` | Probability that a constraint binds over the next horizon, anchored at the latest observed interval | `duid`, `model_path`, `horizon_hours`, `history_days`, `source`, `end_date` |
+| `aemo_forecast_duid_constraints` | Probability that a constraint binds over the next horizon, anchored at the latest observed interval — plus a per-hour forward curve when given a lead-time bundle | `duid`, `model_path`, `horizon_hours`, `history_days`, `source`, `end_date` |
 
 `aemo_list_duid_targets` reads the committed scan artifacts and never touches the network.
 The other three accept a `source` argument:
@@ -707,4 +799,6 @@ For a stronger production version, add:
 - Add long-run historical backtesting and grouped time-series cross-validation.
 - Add DUID geospatial metadata and weather-grid matching.
 - Add calibrated probabilities and threshold tuning by business objective.
+- Revisit lead-time buckets once far more than 3 binding events are available, with P5MIN/Predispatch
+  constraint solutions to carry the timing signal the dispatch-lag features do not.
 - Add monitoring for data freshness, AEMO schema changes, and model drift.

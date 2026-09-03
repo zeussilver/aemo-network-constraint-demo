@@ -145,6 +145,13 @@ def test_forecast_tool_passes_through_the_origin_anchored_payload(tmp_path: Path
         "planned_constraints": [{"genconid": "#GC_A", "active_intervals": 12}],
         "planned_constraints_source": "proxy",
         "recent_risk_history": [{"origin": "2026-04-23T03:00:00", "probability": 0.4, "risk_level": "medium"}],
+        "risk_curve": [
+            {"lead_hours": 1, "window_start": "2026-04-23T04:00:00", "window_end": "2026-04-23T05:00:00",
+             "probability": 0.2, "risk_level": "medium"},
+            {"lead_hours": 2, "window_start": "2026-04-23T05:00:00", "window_end": "2026-04-23T06:00:00",
+             "probability": 0.7, "risk_level": "high"},
+        ],
+        "peak_lead": {"lead_hours": 2, "probability": 0.7, "risk_level": "high"},
         "limitations": "demo",
     }
     captured: dict = {}
@@ -165,6 +172,8 @@ def test_forecast_tool_passes_through_the_origin_anchored_payload(tmp_path: Path
     assert result["feature_coverage"]["imputed"] == 0
     assert result["planned_constraints"] == [{"genconid": "#GC_A", "active_intervals": 12}]
     assert result["recent_risk_history"][0]["risk_level"] == "medium"
+    assert [bucket["lead_hours"] for bucket in result["risk_curve"]] == [1, 2]
+    assert result["peak_lead"]["lead_hours"] == 2
     # Serving options must reach the forecast helper rather than being silently dropped.
     assert captured["source"] == "cache"
     assert captured["end_date"] == "2026-04-22"

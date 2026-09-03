@@ -150,6 +150,47 @@ def summarise_planned_constraints(bundle: dict, origin: pd.Timestamp, horizon_ho
     ]
 
 
+def _lead_time_risk_curve(
+    bundle: dict,
+    origin_features: pd.DataFrame,
+    origin: pd.Timestamp,
+) -> tuple[list[dict], dict | None]:
+    """Score each lead-time bucket from the one origin row.
+
+    Buckets tile the horizon with disjoint windows, so a bundle that carries them turns a
+    single origin into a forward risk curve. Every bucket sees the same observed features,
+    which is what keeps the curve free of the skew a per-future-interval scoring pass had.
+    """
+    lead_models = bundle.get("lead_models") or {}
+    if not lead_models:
+        return [], None
+
+    bucket_hours = int(bundle.get("lead_bucket_hours") or 1)
+    curve: list[dict] = []
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning, module=r"sklearn\..*")
+        for lead in sorted(lead_models):
+            probability = float(lead_models[lead].predict_proba(origin_features)[:, 1][0])
+            curve.append(
+                {
+                    "lead_hours": int(lead),
+                    "window_start": (origin + pd.Timedelta(hours=int(lead) - bucket_hours)).isoformat(),
+                    "window_end": (origin + pd.Timedelta(hours=int(lead))).isoformat(),
+                    "probability": round(probability, 4),
+                    "risk_level": risk_level(probability),
+                }
+            )
+
+    peak = max(curve, key=lambda bucket: bucket["probability"])
+    return curve, {
+        "lead_hours": peak["lead_hours"],
+        "window_start": peak["window_start"],
+        "window_end": peak["window_end"],
+        "probability": peak["probability"],
+        "risk_level": peak["risk_level"],
+    }
+
+
 def _risk_history(frame: pd.DataFrame, scores, hours: int = RISK_HISTORY_HOURS) -> list[dict]:
     """Hourly risk trajectory over the trailing window, oldest first."""
     step = INTERVALS_PER_HOUR
@@ -181,6 +222,9 @@ def forecast_from_bundle(
     Returns one probability - the quantity the model was trained to estimate - anchored at
     the newest dispatch interval available from NEMWeb, plus the invoked-constraint
     timeline over the horizon and the trailing risk trajectory.
+
+    A bundle carrying lead-time bucket models additionally returns ``risk_curve``: one
+    probability per disjoint window inside the horizon, all scored from that same origin.
     """
     bundle = joblib.load(model_path)
     trained_duid = str(bundle["duid"]).upper()
@@ -236,6 +280,8 @@ def forecast_from_bundle(
     origin_features = frame.iloc[-1][feature_cols]
     imputed = sorted(col for col in feature_cols if pd.isna(origin_features[col]))
 
+    risk_curve, peak_lead = _lead_time_risk_curve(bundle, frame[feature_cols].iloc[[-1]], origin)
+
     if bundle_no_weather:
         weather_source = "not_used_no_weather_bundle"
     elif not use_weather:
@@ -284,6 +330,7 @@ def forecast_from_bundle(
         "model": {
             "model_type": metrics.get("model_type"),
             "feature_set": bundle.get("feature_set"),
+            "lead_hours": sorted(bundle.get("lead_models") or {}) or None,
             "target_column": bundle.get("target_column", metrics.get("target_column")),
             "horizon_hours": bundle.get("horizon_hours", metrics.get("horizon_hours")),
             "positive_rate": metrics.get("positive_rate"),
@@ -295,6 +342,8 @@ def forecast_from_bundle(
         "relevant_genconids_count": len(relevant),
         "planned_constraints": summarise_planned_constraints(bundle, origin, resolved_horizon),
         "planned_constraints_source": "GENCONSETINVOKE relevant-set proxy when available",
+        "risk_curve": risk_curve,
+        "peak_lead": peak_lead,
         "recent_risk_history": _risk_history(frame, scores),
         "limitations": (
             "Demo model. Out-of-sample evidence is the event-window backtest (mean AP 0.615, "

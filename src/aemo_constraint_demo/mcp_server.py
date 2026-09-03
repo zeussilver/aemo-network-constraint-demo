@@ -86,6 +86,9 @@ Every tool takes a `source` argument. "cache" answers from previously downloaded
 files only, "network" always fetches from NEMWeb (roughly 3-5 seconds per trading day),
 and the default "auto" uses the cache when it already covers the requested window.
 
+Some bundles carry lead-time bucket models; forecasting with one adds a forward risk curve
+across the horizon alongside the single whole-horizon probability.
+
 NEMWeb publishes Next Day Dispatch for the previous trading day, so nothing here is live.
 The forecast is anchored at the latest published dispatch interval and reports `as_of` and
 `data_lag_hours`; quote them rather than implying a real-time answer.
@@ -284,6 +287,7 @@ def _trained_models() -> list[dict[str, Any]]:
                 "horizon_hours": bundle.get("horizon_hours", metrics.get("horizon_hours")),
                 "model_type": metrics.get("model_type"),
                 "feature_set": bundle.get("feature_set"),
+                "lead_hours": bundle.get("lead_hours"),
                 "target_column": bundle.get("target_column"),
                 "trained_at_utc": bundle.get("trained_at_utc"),
             }
@@ -331,7 +335,10 @@ def aemo_list_duid_targets(
       targets: [{duid, days, horizon_hours, connection_point_id, relevant_genconid_count,
                  total_intervals, positive_intervals, positive_rate, recommended,
                  recommendation_reason}],
-      trained_models: [{model_path, duid, horizon_hours, model_type, feature_set}]
+      trained_models: [{model_path, duid, horizon_hours, model_type, feature_set, lead_hours}]
+
+    A bundle with a non-null lead_hours also returns a forward risk curve, one probability
+    per hour inside the horizon, from aemo_forecast_duid_constraints.
     """
     scan_path = _scan_artifact_path()
     if scan_path is None:
@@ -628,10 +635,16 @@ def aemo_forecast_duid_constraints(
       constraint_risk {probability, risk_level, statement},
       feature_coverage {required, observed, imputed, imputed_examples},
       dispatch_source {source, history_days, first_interval, last_interval, interval_count},
-      weather_source, weather_warning, model {model_type, feature_set, target_column,
-      positive_rate, trained_at_utc}, planned_constraints: [{genconid, active_intervals,
-      first_interval, last_interval}], recent_risk_history: [{origin, probability,
-      risk_level}], relevant_genconid_count, limitations
+      weather_source, weather_warning, model {model_type, feature_set, lead_hours,
+      target_column, positive_rate, trained_at_utc}, planned_constraints: [{genconid,
+      active_intervals, first_interval, last_interval}], recent_risk_history: [{origin,
+      probability, risk_level}], relevant_genconid_count, limitations
+
+    With a lead-time bundle (see aemo_list_duid_targets for which ones carry lead_hours)
+    it also returns risk_curve: [{lead_hours, window_start, window_end, probability,
+    risk_level}] - one probability per hour inside the horizon, every bucket scored from
+    the same origin - plus peak_lead naming the riskiest window. constraint_risk stays the
+    probability for the whole horizon; the curve says where inside it the risk sits.
 
     A non-zero feature_coverage.imputed means the model was scored on incomplete inputs -
     usually too little dispatch history, or weather disabled. Say so when reporting the
@@ -676,6 +689,8 @@ def aemo_forecast_duid_constraints(
         "model": payload["model"],
         "model_path": _display_path(path),
         "relevant_genconid_count": payload["relevant_genconids_count"],
+        "risk_curve": payload["risk_curve"],
+        "peak_lead": payload["peak_lead"],
         "planned_constraints": payload["planned_constraints"],
         "planned_constraints_source": payload["planned_constraints_source"],
         "recent_risk_history": payload["recent_risk_history"],

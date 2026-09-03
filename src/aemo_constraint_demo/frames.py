@@ -25,7 +25,7 @@ from .features import (
     relevant_constraints_for_duid,
     select_feature_columns,
 )
-from .scan import add_horizon_labels, horizon_label_column
+from .scan import add_horizon_labels, add_lead_time_labels, horizon_label_column, lead_time_label_column
 from .weather import fetch_open_meteo_history, merge_weather_to_intervals
 
 INTERVALS_PER_HOUR = 12
@@ -41,6 +41,7 @@ class ModelFrame:
     target_column: str
     connection_point: str | None
     relevant_genconids: list[str]
+    lead_target_columns: dict[int, str] = field(default_factory=dict)
     lhs_rows: pd.DataFrame | None = None
     metadata: dict = field(default_factory=dict)
 
@@ -51,6 +52,7 @@ def build_model_frame(
     horizon_hours: int = 0,
     *,
     feature_set: str = "time_weather",
+    lead_hours: Sequence[int] | None = None,
     include_dispatch_features: bool = False,
     bind_threshold: float = 0.0,
     no_weather: bool = False,
@@ -79,6 +81,11 @@ def build_model_frame(
     ``drop_incomplete_horizon`` controls the tail. Training drops the final
     ``horizon_hours`` of rows because their labels are not yet knowable. Serving must
     keep them: the forecast origin is precisely the newest of those rows.
+
+    ``lead_hours`` additionally adds disjoint lead-time bucket labels, so one model per
+    bucket can be scored from a single origin to produce a forward risk curve. Every lead
+    must fall inside ``horizon_hours``, which makes the horizon tail the widest unlabelled
+    tail and lets one drop cover every bucket.
 
     ``weather_required`` decides what an Open-Meteo failure means. Training fails loudly
     so a model is never fitted on silently-missing weather; serving passes ``False`` and
@@ -123,15 +130,29 @@ def build_model_frame(
         bind_threshold=bind_threshold,
     )
 
+    leads = [int(lead) for lead in (lead_hours or [])]
+    if leads:
+        if horizon_hours <= 0:
+            raise ValueError("lead_hours requires a positive horizon_hours.")
+        if max(leads) > horizon_hours:
+            raise ValueError(
+                f"lead_hours must fall inside horizon_hours={horizon_hours}; got {sorted(leads)}."
+            )
+
     target_column = CURRENT_INTERVAL_TARGET
+    lead_target_columns: dict[int, str] = {}
     dropped_incomplete_horizon_rows = 0
     if horizon_hours > 0:
         frame = add_horizon_labels(frame, [horizon_hours], intervals_per_hour=INTERVALS_PER_HOUR)
         target_column = horizon_label_column(horizon_hours)
+        if leads:
+            frame = add_lead_time_labels(frame, leads, intervals_per_hour=INTERVALS_PER_HOUR)
+            lead_target_columns = {lead: lead_time_label_column(lead) for lead in sorted(leads)}
         dropped_incomplete_horizon_rows = min(len(frame), horizon_hours * INTERVALS_PER_HOUR)
         if dropped_incomplete_horizon_rows:
+            # The horizon tail is the widest unlabelled tail, so this covers every bucket.
             tail_index = frame.tail(dropped_incomplete_horizon_rows).index
-            frame.loc[tail_index, target_column] = pd.NA
+            frame.loc[tail_index, [target_column, *lead_target_columns.values()]] = pd.NA
 
     frame = add_feature_set_features(frame, feature_set=feature_set, intervals_per_hour=INTERVALS_PER_HOUR)
 
@@ -167,6 +188,7 @@ def build_model_frame(
         "days": int(days),
         "horizon_hours": horizon_hours,
         "feature_set": feature_set,
+        "lead_hours": sorted(lead_target_columns) or None,
         "dropped_incomplete_horizon_rows": dropped_incomplete_horizon_rows,
         "weather_used": weather_used,
         "weather_error": weather_error,
@@ -180,6 +202,7 @@ def build_model_frame(
         target_column=target_column,
         connection_point=resolved_connection_point,
         relevant_genconids=list(relevant),
+        lead_target_columns=lead_target_columns,
         lhs_rows=lhs_rows,
         metadata=metadata,
     )
