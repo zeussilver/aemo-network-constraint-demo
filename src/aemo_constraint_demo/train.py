@@ -17,7 +17,11 @@ from sklearn.metrics import average_precision_score, brier_score_loss, classific
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from .aemo_client import load_next_day_dispatch_tables, read_monthly_table
+from .aemo_client import (
+    load_next_day_dispatch_tables,
+    read_monthly_table,
+    read_monthly_table_cached_first,
+)
 from .features import FEATURE_SET_CHOICES, numericise_feature_columns
 from .frames import build_model_frame
 from .models import ConstantProbabilityClassifier
@@ -261,6 +265,70 @@ def resolve_coordinates(
     )
 
 
+def read_standing_table(
+    table: str,
+    source: str = "network",
+    year: int | None = None,
+    month: int | None = None,
+    cache_dir: str | Path = "data/cache",
+) -> pd.DataFrame:
+    """Read a monthly standing-data table, optionally preferring the local cache.
+
+    The default keeps training on the network path. Offline callers pass "cache" or
+    "auto", which matters because NEMWeb publishes a month's archive some weeks after
+    that month starts.
+    """
+    if source == "network":
+        return read_monthly_table(table, year=year, month=month, cache_dir=cache_dir)
+    return read_monthly_table_cached_first(table, year=year, month=month, cache_dir=cache_dir, source=source)
+
+
+def planned_constraint_tables(
+    relevant_genconids: "list[str] | set[str]",
+    static_year: int | None = None,
+    static_month: int | None = None,
+    cache_dir: str | Path = "data/cache",
+    source: str = "network",
+) -> dict[str, pd.DataFrame]:
+    """Return the planned/invoked constraint rows relevant to one DUID.
+
+    Only relevant rows are kept, so a model bundle can carry the planned-constraint view
+    without carrying whole monthly standing-data tables.
+    """
+    relevant = {str(item).upper() for item in relevant_genconids}
+    tables = {}
+    for name in ("GENCONDATA", "GENCONSET", "GENCONSETINVOKE"):
+        table = read_standing_table(
+            name, source=source, year=static_year, month=static_month, cache_dir=cache_dir
+        ).copy()
+        table.columns = [str(col).strip().upper() for col in table.columns]
+        tables[name] = table
+
+    def _by_genconid(table: pd.DataFrame) -> pd.DataFrame:
+        column = table.get("GENCONID", pd.Series(index=table.index, dtype=str))
+        return table[column.astype(str).str.upper().isin(relevant)].copy()
+
+    relevant_gdata = _by_genconid(tables["GENCONDATA"])
+    relevant_gset = _by_genconid(tables["GENCONSET"])
+
+    relevant_sets: set[str] = set()
+    if not relevant_gset.empty and "GENCONSETID" in relevant_gset.columns:
+        relevant_sets = set(relevant_gset["GENCONSETID"].astype(str).str.upper())
+    invocations = tables["GENCONSETINVOKE"]
+    if relevant_sets and "GENCONSETID" in invocations.columns:
+        relevant_invocations = invocations[
+            invocations["GENCONSETID"].astype(str).str.upper().isin(relevant_sets)
+        ].copy()
+    else:
+        relevant_invocations = pd.DataFrame()
+
+    return {
+        "planned_gencondata": relevant_gdata,
+        "planned_genconset": relevant_gset,
+        "planned_genconsetinvoke": relevant_invocations,
+    }
+
+
 def train_demo_model(
     duid: str,
     latitude: float | None = None,
@@ -305,12 +373,6 @@ def train_demo_model(
     spd_cp = read_monthly_table(
         "SPDCONNECTIONPOINTCONSTRAINT", year=static_year, month=static_month, cache_dir=cache_dir
     )
-    gencondata = read_monthly_table("GENCONDATA", year=static_year, month=static_month, cache_dir=cache_dir)
-    genconset = read_monthly_table("GENCONSET", year=static_year, month=static_month, cache_dir=cache_dir)
-    genconsetinvoke = read_monthly_table(
-        "GENCONSETINVOKE", year=static_year, month=static_month, cache_dir=cache_dir
-    )
-
     print(f"Downloading and parsing latest {days} Next Day Dispatch files...", flush=True)
     dispatch = load_next_day_dispatch_tables(
         days=days,
@@ -401,35 +463,9 @@ def train_demo_model(
     }
     metrics_path.write_text(json.dumps(metrics, indent=2, default=str), encoding="utf-8")
 
-    # Keep only relevant planned-data rows in the model bundle to keep it lightweight.
-    gencondata_u = gencondata.copy()
-    gencondata_u.columns = [str(c).strip().upper() for c in gencondata_u.columns]
-    genconset_u = genconset.copy()
-    genconset_u.columns = [str(c).strip().upper() for c in genconset_u.columns]
-    genconsetinvoke_u = genconsetinvoke.copy()
-    genconsetinvoke_u.columns = [str(c).strip().upper() for c in genconsetinvoke_u.columns]
-
-    relevant_gdata = gencondata_u[
-        gencondata_u.get("GENCONID", pd.Series(index=gencondata_u.index, dtype=str))
-        .astype(str)
-        .str.upper()
-        .isin(relevant)
-    ].copy()
-    relevant_gset = genconset_u[
-        genconset_u.get("GENCONID", pd.Series(index=genconset_u.index, dtype=str))
-        .astype(str)
-        .str.upper()
-        .isin(relevant)
-    ].copy()
-    relevant_sets = set()
-    if not relevant_gset.empty and "GENCONSETID" in relevant_gset.columns:
-        relevant_sets = set(relevant_gset["GENCONSETID"].astype(str).str.upper())
-    if relevant_sets and "GENCONSETID" in genconsetinvoke_u.columns:
-        relevant_invocations = genconsetinvoke_u[
-            genconsetinvoke_u["GENCONSETID"].astype(str).str.upper().isin(relevant_sets)
-        ].copy()
-    else:
-        relevant_invocations = pd.DataFrame()
+    planned = planned_constraint_tables(
+        relevant, static_year=static_year, static_month=static_month, cache_dir=cache_dir
+    )
 
     bundle = {
         "model": model,
@@ -441,9 +477,7 @@ def train_demo_model(
         "coordinate_source": coordinate_metadata,
         "relevant_genconids": relevant,
         "lhs_rows": lhs_rows,
-        "planned_gencondata": relevant_gdata,
-        "planned_genconset": relevant_gset,
-        "planned_genconsetinvoke": relevant_invocations,
+        **planned,
         "metrics": metrics,
         "trained_at_utc": trained_at,
         "horizon_hours": int(horizon_hours),

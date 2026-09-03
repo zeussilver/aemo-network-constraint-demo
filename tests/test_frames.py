@@ -6,6 +6,7 @@ import pytest
 
 from src.aemo_constraint_demo import frames as frames_module
 from src.aemo_constraint_demo.frames import build_model_frame
+from src.aemo_constraint_demo.scan import add_lead_time_labels
 
 DUID = "D1"
 FEATURE_SET = "time_weather_dispatch_lag"
@@ -157,3 +158,52 @@ def test_preloaded_dispatch_tables_skip_the_download(monkeypatch) -> None:
 
     assert result.connection_point == "CP1"
     assert result.relevant_genconids == ["C1"]
+
+
+def test_lead_time_buckets_tile_the_horizon_without_overlap(offline_frames) -> None:
+    result = _build(lead_hours=[1, 2, 3, 4, 5, 6])
+    frame = result.frame
+
+    assert result.lead_target_columns == {lead: f"target_constrained_lead_{lead}h" for lead in range(1, 7)}
+    assert result.metadata["lead_hours"] == [1, 2, 3, 4, 5, 6]
+
+    bucket_columns = list(result.lead_target_columns.values())
+    # "binds in some bucket" must be exactly "binds somewhere in the horizon".
+    union = frame[bucket_columns].max(axis=1).astype(int)
+    assert (union == frame[result.target_column].astype(int)).all()
+
+
+def test_lead_time_buckets_are_dropped_with_the_horizon_tail(offline_frames) -> None:
+    training = _build(lead_hours=[1, 6])
+    serving = _build(lead_hours=[1, 6], drop_incomplete_horizon=False)
+
+    # Training keeps only fully-observed buckets; the horizon tail is the widest.
+    assert not training.frame[list(training.lead_target_columns.values())].isna().any().any()
+    assert serving.frame[serving.lead_target_columns[6]].isna().sum() == 6 * 12
+
+
+def test_lead_hours_must_fit_inside_the_horizon(offline_frames) -> None:
+    with pytest.raises(ValueError, match="must fall inside horizon_hours"):
+        _build(horizon_hours=6, lead_hours=[1, 8])
+
+
+def test_a_single_binding_interval_falls_in_exactly_one_bucket() -> None:
+    """The sharp disjointness property, isolated from any binding episode."""
+    periods = 120
+    bind_at = 30  # 30 intervals ahead of origin 0 is 2.5h, so bucket 3: (2h, 3h]
+    labels = pd.DataFrame(
+        {
+            "SETTLEMENTDATE": pd.date_range("2026-05-01", periods=periods, freq="5min"),
+            "target_constrained": [1 if index == bind_at else 0 for index in range(periods)],
+        }
+    )
+
+    out = add_lead_time_labels(labels, [1, 2, 3, 4], intervals_per_hour=12)
+    columns = [f"target_constrained_lead_{lead}h" for lead in (1, 2, 3, 4)]
+
+    assert out[columns].sum(axis=1).max() == 1
+    assert out.loc[0, "target_constrained_lead_3h"] == 1
+    # An origin one interval before the bind sees it in the first bucket...
+    assert out.loc[bind_at - 1, "target_constrained_lead_1h"] == 1
+    # ...and the binding interval itself is excluded from its own buckets.
+    assert out.loc[bind_at, columns].sum() == 0
