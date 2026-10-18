@@ -369,6 +369,67 @@ def add_horizon_labels(
     return out
 
 
+def lead_time_label_column(lead_hours: int) -> str:
+    """Return the target column name for a single lead-time bucket."""
+    lead = int(lead_hours)
+    if lead <= 0:
+        raise ValueError("lead_hours must be positive for a lead-time label.")
+    return f"target_constrained_lead_{lead}h"
+
+
+def add_lead_time_labels(
+    labels: pd.DataFrame,
+    lead_hours: Sequence[int],
+    bucket_hours: int = 1,
+    intervals_per_hour: int = 12,
+) -> pd.DataFrame:
+    """Add disjoint lead-time bucket labels derived from ``target_constrained``.
+
+    Where a horizon label answers "does a constraint bind at any point in the next X
+    hours", a lead-time label answers "does one bind in the Xth hour specifically":
+
+        target_constrained_lead_Xh(t) = 1 if any bind falls in (t + (X-1)h, t + Xh]
+
+    The buckets tile the horizon without overlapping, so scoring one model per bucket
+    from the same origin produces a forward risk curve. Features stay origin-anchored:
+    the current interval is excluded from every bucket.
+
+    Like :func:`add_horizon_labels` this does not mask the tail whose future is not yet
+    observed - :func:`~src.aemo_constraint_demo.frames.build_model_frame` does that.
+    """
+    if intervals_per_hour <= 0:
+        raise ValueError("intervals_per_hour must be positive.")
+    if bucket_hours <= 0:
+        raise ValueError("bucket_hours must be positive.")
+
+    out = labels.copy()
+    if "SETTLEMENTDATE" in out.columns:
+        out["SETTLEMENTDATE"] = parse_datetime(out["SETTLEMENTDATE"])
+        out = out.sort_values("SETTLEMENTDATE").reset_index(drop=True)
+    if "target_constrained" not in out.columns:
+        raise ValueError("labels must contain target_constrained.")
+
+    current = out["target_constrained"].fillna(0).astype(int)
+    reversed_current = current.iloc[::-1]
+    steps = int(bucket_hours) * intervals_per_hour
+    for lead in _normalise_horizons(lead_hours):
+        if lead <= 0:
+            continue
+        # Skip the intervals before this bucket opens, then take "any bind" across it.
+        offset = (int(lead) - int(bucket_hours)) * intervals_per_hour
+        bucket_any = (
+            reversed_current
+            .shift(offset + 1)
+            .rolling(window=steps, min_periods=1)
+            .max()
+            .iloc[::-1]
+            .fillna(0)
+            .astype(int)
+        )
+        out[lead_time_label_column(lead)] = bucket_any
+    return out
+
+
 def summarise_duid_window(
     duid: str,
     days: int,

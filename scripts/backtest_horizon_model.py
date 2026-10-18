@@ -20,16 +20,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.aemo_constraint_demo.aemo_client import load_next_day_dispatch_tables, read_monthly_table
-from src.aemo_constraint_demo.features import (
-    FEATURE_SET_CHOICES,
-    add_feature_set_features,
-    build_label_frame,
-    numericise_feature_columns,
-    relevant_constraints_for_duid,
-    select_feature_columns,
-)
-from src.aemo_constraint_demo.scan import add_horizon_labels, horizon_label_column
+from src.aemo_constraint_demo.aemo_client import read_monthly_table
+from src.aemo_constraint_demo.features import FEATURE_SET_CHOICES
+from src.aemo_constraint_demo.frames import build_model_frame
 from src.aemo_constraint_demo.train import (
     DEFAULT_BACKTEST_WINDOW_HOURS,
     DEFAULT_COORDINATE_FILE,
@@ -53,28 +46,6 @@ def _json_default(value):
     if isinstance(value, pd.Timestamp):
         return _format_timestamp(value)
     return str(value)
-
-
-def _is_target_like_column(column: str) -> bool:
-    normalized = str(column).strip().lower()
-    return normalized == "target_constrained" or normalized.startswith("target_constrained_next_")
-
-
-def safe_feature_columns(
-    frame: pd.DataFrame,
-    include_dispatch_features: bool = False,
-    feature_set: str | None = None,
-) -> list[str]:
-    """Return train.py-compatible features with an explicit target-column guard."""
-    return [
-        col
-        for col in select_feature_columns(
-            frame,
-            include_dispatch_features=include_dispatch_features,
-            feature_set=feature_set,
-        )
-        if not _is_target_like_column(col)
-    ]
 
 
 def precision_and_lift_at_top_fraction(y_true: Iterable[int], y_score: Iterable[float], fraction: float) -> tuple[float | None, float | None]:
@@ -295,54 +266,30 @@ def build_backtest_frame(
     spd_cp = read_monthly_table(
         "SPDCONNECTIONPOINTCONSTRAINT", year=static_year, month=static_month, cache_dir=cache_dir
     )
-    relevant, connection_point, _ = relevant_constraints_for_duid(duid, dudetail, spd_cp)
 
-    dispatch = load_next_day_dispatch_tables(
-        days=days,
-        table_names=["DISPATCHLOAD", "DISPATCHCONSTRAINT"],
-        cache_dir=cache_dir,
-    )
-    frame = build_label_frame(
-        dispatchload=dispatch["DISPATCHLOAD"],
-        dispatchconstraint=dispatch["DISPATCHCONSTRAINT"],
+    model_frame = build_model_frame(
         duid=duid,
-        relevant_genconids=relevant,
-        bind_threshold=bind_threshold,
-    )
-
-    target_column = horizon_label_column(horizon_hours)
-    frame = add_horizon_labels(frame, [horizon_hours], intervals_per_hour=INTERVALS_PER_HOUR)
-    dropped_incomplete_horizon_rows = min(len(frame), int(horizon_hours) * INTERVALS_PER_HOUR)
-    if dropped_incomplete_horizon_rows:
-        tail_index = frame.tail(dropped_incomplete_horizon_rows).index
-        frame.loc[tail_index, target_column] = pd.NA
-    frame = add_feature_set_features(frame, feature_set=feature_set, intervals_per_hour=INTERVALS_PER_HOUR)
-
-    if not no_weather:
-        start = frame["SETTLEMENTDATE"].min().date()
-        end = frame["SETTLEMENTDATE"].max().date()
-        weather = fetch_open_meteo_history(latitude, longitude, start, end)
-        frame = merge_weather_to_intervals(frame, weather)
-
-    feature_cols = safe_feature_columns(
-        frame,
-        include_dispatch_features=include_dispatch_features,
+        days=days,
+        horizon_hours=horizon_hours,
         feature_set=feature_set,
+        include_dispatch_features=include_dispatch_features,
+        bind_threshold=bind_threshold,
+        no_weather=no_weather,
+        latitude=latitude,
+        longitude=longitude,
+        cache_dir=cache_dir,
+        dudetail=dudetail,
+        spd_connectionpoint=spd_cp,
     )
-    if not feature_cols:
-        raise ValueError("No feature columns available after feature engineering.")
-
-    frame = numericise_feature_columns(frame, feature_cols)
-    frame = frame.dropna(subset=[target_column, "SETTLEMENTDATE"]).sort_values("SETTLEMENTDATE").reset_index(drop=True)
     metadata = {
-        "connection_point": connection_point,
-        "relevant_genconid_count": len(relevant),
+        "connection_point": model_frame.connection_point,
+        "relevant_genconid_count": len(model_frame.relevant_genconids),
         "coordinate_source": coordinate_metadata,
-        "dropped_incomplete_horizon_rows": dropped_incomplete_horizon_rows,
-        "feature_columns": feature_cols,
+        "dropped_incomplete_horizon_rows": model_frame.metadata["dropped_incomplete_horizon_rows"],
+        "feature_columns": model_frame.feature_columns,
         "feature_set": feature_set,
     }
-    return frame, feature_cols, target_column, metadata
+    return model_frame.frame, model_frame.feature_columns, model_frame.target_column, metadata
 
 
 def run_backtest(args: argparse.Namespace) -> dict:
