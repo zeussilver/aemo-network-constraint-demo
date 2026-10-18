@@ -1,0 +1,84 @@
+{
+  "generated_at": "2026-10-18T16:12:12+00:00",
+  "volume": [
+    {
+      "table": "forecast_snapshot",
+      "rows": 1,
+      "duids": 1,
+      "first": "2026-10-17T18:00:00+00:00",
+      "last": "2026-10-17T18:00:00+00:00"
+    },
+    {
+      "table": "forecast_used",
+      "rows": 20736,
+      "duids": 12,
+      "first": "2026-10-11T18:05:00+00:00",
+      "last": "2026-10-17T18:00:00+00:00"
+    },
+    {
+      "table": "forecast_origin_interval",
+      "rows": 35752,
+      "duids": 12,
+      "first": "2026-10-11T18:05:00+00:00",
+      "last": "2026-10-17T18:00:00+00:00"
+    },
+    {
+      "table": "scada_reading",
+      "rows": 103968,
+      "duids": 12,
+      "first": "2026-09-18T14:05:00+00:00",
+      "last": "2026-10-18T16:00:00+00:00"
+    },
+    {
+      "table": "dispatch_solution",
+      "rows": 100224,
+      "duids": 12,
+      "first": "2026-09-18T18:05:00+00:00",
+      "last": "2026-10-17T18:00:00+00:00"
+    }
+  ],
+  "scada_vs_initialmw": {
+    "pairs": 100224,
+    "median_abs_diff_mw": 0.0,
+    "p95_abs_diff_mw": 0.0,
+    "share_within_1mw": 1.0
+  },
+  "ingest_runs": [
+    {
+      "source": "scada",
+      "trigger": "backfill",
+      "status": "success",
+      "files_processed": 341,
+      "rows_written": 103968,
+      "bytes_downloaded": 35860766,
+      "seconds": 167.942
+    },
+    {
+      "source": "dispatch",
+      "trigger": "backfill",
+      "status": "success",
+      "files_processed": 29,
+      "rows_written": 100224,
+      "bytes_downloaded": 246909472,
+      "seconds": 258.392
+    },
+    {
+      "source": "intermittent",
+      "trigger": "backfill",
+      "status": "success",
+      "files_processed": 6,
+      "rows_written": 56488,
+      "bytes_downloaded": 244966480,
+      "seconds": 222.146
+    },
+    {
+      "source": "forecast",
+      "trigger": "backfill",
+      "status": "success",
+      "files_processed": 1,
+      "rows_written": 1,
+      "bytes_downloaded": 0,
+      "seconds": 57.135
+    }
+  ]
+}

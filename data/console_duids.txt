@@ -1,0 +1,15 @@
+# Ops console sites: DUIDs where the Phase 1.5 constraint scan found real binding history
+# (artifacts/duid_constraint_scan_expanded_top.csv). Validated against AEMO standing data
+# by scripts/build_site_registry.py.
+CATHROCK
+BULGANA1
+WOOLGSF1
+MUCRKSF1
+WAMBOWF2
+GSWF1A
+GNNDHSF1
+RRSF1
+MEWF1
+WELNSF1
+KSP1
+GOONSF1
