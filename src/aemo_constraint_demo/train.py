@@ -17,18 +17,14 @@ from sklearn.metrics import average_precision_score, brier_score_loss, classific
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from .aemo_client import load_next_day_dispatch_tables, read_monthly_table
-from .features import (
-    FEATURE_SET_CHOICES,
-    add_feature_set_features,
-    build_label_frame,
-    numericise_feature_columns,
-    relevant_constraints_for_duid,
-    select_feature_columns,
+from .aemo_client import (
+    load_next_day_dispatch_tables,
+    read_monthly_table,
+    read_monthly_table_cached_first,
 )
+from .features import FEATURE_SET_CHOICES, numericise_feature_columns
+from .frames import build_model_frame
 from .models import ConstantProbabilityClassifier
-from .scan import add_horizon_labels, horizon_label_column
-from .weather import fetch_open_meteo_history, merge_weather_to_intervals
 
 DEFAULT_COORDINATE_FILE = Path("data/duid_coordinates.csv")
 INTERVALS_PER_HOUR = 12
@@ -269,6 +265,70 @@ def resolve_coordinates(
     )
 
 
+def read_standing_table(
+    table: str,
+    source: str = "network",
+    year: int | None = None,
+    month: int | None = None,
+    cache_dir: str | Path = "data/cache",
+) -> pd.DataFrame:
+    """Read a monthly standing-data table, optionally preferring the local cache.
+
+    The default keeps training on the network path. Offline callers pass "cache" or
+    "auto", which matters because NEMWeb publishes a month's archive some weeks after
+    that month starts.
+    """
+    if source == "network":
+        return read_monthly_table(table, year=year, month=month, cache_dir=cache_dir)
+    return read_monthly_table_cached_first(table, year=year, month=month, cache_dir=cache_dir, source=source)
+
+
+def planned_constraint_tables(
+    relevant_genconids: "list[str] | set[str]",
+    static_year: int | None = None,
+    static_month: int | None = None,
+    cache_dir: str | Path = "data/cache",
+    source: str = "network",
+) -> dict[str, pd.DataFrame]:
+    """Return the planned/invoked constraint rows relevant to one DUID.
+
+    Only relevant rows are kept, so a model bundle can carry the planned-constraint view
+    without carrying whole monthly standing-data tables.
+    """
+    relevant = {str(item).upper() for item in relevant_genconids}
+    tables = {}
+    for name in ("GENCONDATA", "GENCONSET", "GENCONSETINVOKE"):
+        table = read_standing_table(
+            name, source=source, year=static_year, month=static_month, cache_dir=cache_dir
+        ).copy()
+        table.columns = [str(col).strip().upper() for col in table.columns]
+        tables[name] = table
+
+    def _by_genconid(table: pd.DataFrame) -> pd.DataFrame:
+        column = table.get("GENCONID", pd.Series(index=table.index, dtype=str))
+        return table[column.astype(str).str.upper().isin(relevant)].copy()
+
+    relevant_gdata = _by_genconid(tables["GENCONDATA"])
+    relevant_gset = _by_genconid(tables["GENCONSET"])
+
+    relevant_sets: set[str] = set()
+    if not relevant_gset.empty and "GENCONSETID" in relevant_gset.columns:
+        relevant_sets = set(relevant_gset["GENCONSETID"].astype(str).str.upper())
+    invocations = tables["GENCONSETINVOKE"]
+    if relevant_sets and "GENCONSETID" in invocations.columns:
+        relevant_invocations = invocations[
+            invocations["GENCONSETID"].astype(str).str.upper().isin(relevant_sets)
+        ].copy()
+    else:
+        relevant_invocations = pd.DataFrame()
+
+    return {
+        "planned_gencondata": relevant_gdata,
+        "planned_genconset": relevant_gset,
+        "planned_genconsetinvoke": relevant_invocations,
+    }
+
+
 def train_demo_model(
     duid: str,
     latitude: float | None = None,
@@ -313,15 +373,6 @@ def train_demo_model(
     spd_cp = read_monthly_table(
         "SPDCONNECTIONPOINTCONSTRAINT", year=static_year, month=static_month, cache_dir=cache_dir
     )
-    gencondata = read_monthly_table("GENCONDATA", year=static_year, month=static_month, cache_dir=cache_dir)
-    genconset = read_monthly_table("GENCONSET", year=static_year, month=static_month, cache_dir=cache_dir)
-    genconsetinvoke = read_monthly_table(
-        "GENCONSETINVOKE", year=static_year, month=static_month, cache_dir=cache_dir
-    )
-
-    relevant, connection_point, lhs_rows = relevant_constraints_for_duid(duid, dudetail, spd_cp)
-    print(f"DUID {duid} maps to connection point {connection_point}; relevant GENCONIDs: {len(relevant)}", flush=True)
-
     print(f"Downloading and parsing latest {days} Next Day Dispatch files...", flush=True)
     dispatch = load_next_day_dispatch_tables(
         days=days,
@@ -329,41 +380,30 @@ def train_demo_model(
         cache_dir=cache_dir,
     )
 
-    frame = build_label_frame(
+    model_frame = build_model_frame(
+        duid=duid,
+        days=days,
+        horizon_hours=horizon_hours,
+        feature_set=feature_set,
+        include_dispatch_features=include_dispatch_features,
+        bind_threshold=bind_threshold,
+        no_weather=no_weather,
+        latitude=latitude,
+        longitude=longitude,
+        cache_dir=cache_dir,
+        dudetail=dudetail,
+        spd_connectionpoint=spd_cp,
         dispatchload=dispatch["DISPATCHLOAD"],
         dispatchconstraint=dispatch["DISPATCHCONSTRAINT"],
-        duid=duid,
-        relevant_genconids=relevant,
-        bind_threshold=bind_threshold,
     )
-    target_column = "target_constrained"
-    dropped_incomplete_horizon_rows = 0
-    if horizon_hours > 0:
-        frame = add_horizon_labels(frame, [horizon_hours], intervals_per_hour=INTERVALS_PER_HOUR)
-        target_column = horizon_label_column(horizon_hours)
-        dropped_incomplete_horizon_rows = min(len(frame), horizon_hours * INTERVALS_PER_HOUR)
-        if dropped_incomplete_horizon_rows:
-            tail_index = frame.tail(dropped_incomplete_horizon_rows).index
-            frame.loc[tail_index, target_column] = pd.NA
-    frame = add_feature_set_features(frame, feature_set=feature_set, intervals_per_hour=INTERVALS_PER_HOUR)
-
-    if not no_weather:
-        start = frame["SETTLEMENTDATE"].min().date()
-        end = frame["SETTLEMENTDATE"].max().date()
-        print(f"Fetching Open-Meteo weather {start} to {end}...", flush=True)
-        weather = fetch_open_meteo_history(latitude, longitude, start, end)
-        frame = merge_weather_to_intervals(frame, weather)
-
-    feature_cols = select_feature_columns(
-        frame,
-        include_dispatch_features=include_dispatch_features,
-        feature_set=feature_set,
-    )
-    if not feature_cols:
-        raise ValueError("No feature columns available after feature engineering.")
-    frame = numericise_feature_columns(frame, feature_cols)
-    frame = frame.dropna(subset=[target_column, "SETTLEMENTDATE"])
-    frame = frame.sort_values("SETTLEMENTDATE").reset_index(drop=True)
+    frame = model_frame.frame
+    feature_cols = model_frame.feature_columns
+    target_column = model_frame.target_column
+    relevant = model_frame.relevant_genconids
+    connection_point = model_frame.connection_point
+    lhs_rows = model_frame.lhs_rows
+    dropped_incomplete_horizon_rows = model_frame.metadata["dropped_incomplete_horizon_rows"]
+    print(f"DUID {duid} maps to connection point {connection_point}; relevant GENCONIDs: {len(relevant)}", flush=True)
 
     split = max(1, int(len(frame) * 0.8))
     train_df = frame.iloc[:split].copy()
@@ -423,35 +463,9 @@ def train_demo_model(
     }
     metrics_path.write_text(json.dumps(metrics, indent=2, default=str), encoding="utf-8")
 
-    # Keep only relevant planned-data rows in the model bundle to keep it lightweight.
-    gencondata_u = gencondata.copy()
-    gencondata_u.columns = [str(c).strip().upper() for c in gencondata_u.columns]
-    genconset_u = genconset.copy()
-    genconset_u.columns = [str(c).strip().upper() for c in genconset_u.columns]
-    genconsetinvoke_u = genconsetinvoke.copy()
-    genconsetinvoke_u.columns = [str(c).strip().upper() for c in genconsetinvoke_u.columns]
-
-    relevant_gdata = gencondata_u[
-        gencondata_u.get("GENCONID", pd.Series(index=gencondata_u.index, dtype=str))
-        .astype(str)
-        .str.upper()
-        .isin(relevant)
-    ].copy()
-    relevant_gset = genconset_u[
-        genconset_u.get("GENCONID", pd.Series(index=genconset_u.index, dtype=str))
-        .astype(str)
-        .str.upper()
-        .isin(relevant)
-    ].copy()
-    relevant_sets = set()
-    if not relevant_gset.empty and "GENCONSETID" in relevant_gset.columns:
-        relevant_sets = set(relevant_gset["GENCONSETID"].astype(str).str.upper())
-    if relevant_sets and "GENCONSETID" in genconsetinvoke_u.columns:
-        relevant_invocations = genconsetinvoke_u[
-            genconsetinvoke_u["GENCONSETID"].astype(str).str.upper().isin(relevant_sets)
-        ].copy()
-    else:
-        relevant_invocations = pd.DataFrame()
+    planned = planned_constraint_tables(
+        relevant, static_year=static_year, static_month=static_month, cache_dir=cache_dir
+    )
 
     bundle = {
         "model": model,
@@ -463,9 +477,7 @@ def train_demo_model(
         "coordinate_source": coordinate_metadata,
         "relevant_genconids": relevant,
         "lhs_rows": lhs_rows,
-        "planned_gencondata": relevant_gdata,
-        "planned_genconset": relevant_gset,
-        "planned_genconsetinvoke": relevant_invocations,
+        **planned,
         "metrics": metrics,
         "trained_at_utc": trained_at,
         "horizon_hours": int(horizon_hours),

@@ -7,3 +7,4 @@ data/cache/
 artifacts/*.joblib
 artifacts/*.pkl
 !artifacts/cathrock_6h_best_model.joblib
+!artifacts/cathrock_lead_time_models.joblib

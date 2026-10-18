@@ -7,9 +7,8 @@ from scripts.backtest_horizon_model import (
     evaluate_event_windows,
     find_positive_event_windows,
     precision_and_lift_at_top_fraction,
-    safe_feature_columns,
 )
-from src.aemo_constraint_demo.features import add_time_features
+from src.aemo_constraint_demo.features import add_time_features, select_feature_columns
 
 
 def test_event_window_backtest_uses_only_prior_training_rows() -> None:
@@ -92,14 +91,14 @@ def test_lift_at_top_fraction_handles_zero_positive_validation_safely() -> None:
     assert lift is None
 
 
-def test_safe_feature_columns_excludes_target_and_horizon_label_columns() -> None:
+def test_select_feature_columns_excludes_target_and_horizon_label_columns() -> None:
     frame = add_time_features(pd.DataFrame({"SETTLEMENTDATE": ["2026-05-01 08:00:00"]}))
     frame["temperature_2m"] = 18.0
     frame["TOTALCLEARED"] = 10.0
     frame["target_constrained"] = 0
     frame["target_constrained_next_6h"] = 1
 
-    columns = safe_feature_columns(frame, include_dispatch_features=True)
+    columns = select_feature_columns(frame, include_dispatch_features=True)
 
     assert "hour_sin" in columns
     assert "temperature_2m" in columns
