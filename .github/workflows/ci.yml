@@ -17,7 +17,7 @@ concurrency:
 jobs:
   python:
     name: Python pipeline (pytest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -47,7 +47,7 @@ jobs:
 
   console:
     name: Console (lint, types, Vitest, build, Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
@@ -105,7 +105,7 @@ jobs:
 
   brand-guard:
     name: No third-party company names in the console
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Search console sources
