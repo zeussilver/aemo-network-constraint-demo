@@ -1,0 +1,10 @@
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "./generated/prisma/client";
+
+/** Build a Prisma client on the node-postgres driver adapter (required since Prisma 7). */
+export function createPrismaClient(connectionString = process.env.DATABASE_URL): PrismaClient {
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is not set.");
+  }
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+}
