@@ -1,12 +1,9 @@
-name: Ingest NEMWeb
+name: Ingest NEMWeb (manual)
 
-# Load new NEMWeb data into the Azure database every 30 minutes. Scheduled runs only start
-# once this file is on the default branch; the deploy workflow also calls it after each deploy.
-# Two slots an hour, off the top of the hour: GitHub can delay or drop scheduled runs under
-# load, and the hourly slot (minute 17) never fired in its first three hours on main.
+# Manual or backfill runs of the NEMWeb ingest from GitHub Actions. The hourly schedule
+# runs on Azure Functions (functions/function_app.py): the GitHub schedule never fired for
+# this repository. Both paths are idempotent, so running this alongside the timer is safe.
 on:
-  schedule:
-    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       trigger:
@@ -14,11 +11,6 @@ on:
         type: choice
         options: [manual, backfill]
         default: manual
-  workflow_call:
-    inputs:
-      trigger:
-        type: string
-        default: backfill
 
 permissions:
   contents: read
@@ -60,7 +52,7 @@ jobs:
             --start-ip-address "$ip" --end-ip-address "$ip" --output none
       - name: Run ops_ingest
         env:
-          TRIGGER: ${{ inputs.trigger || (github.event_name == 'schedule' && 'schedule') || 'manual' }}
+          TRIGGER: ${{ inputs.trigger || 'manual' }}
         run: |
           token="$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)"
           echo "::add-mask::$token"
