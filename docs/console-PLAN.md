@@ -711,3 +711,81 @@ NEMWeb. An hourly run fetches about 12.
   TTFB. The next took 210 ms.
 - So at 25 minutes idle there was no multi-second cold start: the F1 app had not been
   unloaded yet. A longer idle period may still unload it. That case is not measured.
+
+### 2026-10-19 — merged to main, alert enabled, alert drill
+- PR #2 merged into `main` (merge commit `8d45fa1`) after all 6 checks passed. The repo
+  does not allow GitHub auto-merge, so the merge was done by hand after the user confirmed
+  green.
+- Deploy run 39194068910 from main succeeded:
+  - build: 67 s;
+  - migrate + deploy + smoke test: 4 min 31 s;
+  - ingest job: 3 min 31 s, all four sources `success`.
+- That ingest was incremental and shows the per-file idempotency in production: SCADA took
+  only the 19 new 5-minute files (228 rows, 36 s), and dispatch, intermittent and forecast
+  found nothing new.
+- `Ingest NEMWeb` is registered on the default branch, so the hourly schedule (minute 17)
+  is live. CI run 39194068812 on main is green.
+- **App Insights server-side durations** (`AppRequests`, last 3 h, before the merge),
+  excluding network:
+
+  | Endpoint | Requests | p50 | p95 |
+  |---|---|---|---|
+  | `GET /api/health` | 48 | 5 ms | 13 ms |
+  | `GET /api/ready` | 47 | 84 ms | 220 ms |
+  | `GET /login` | 28 | 11 ms | 19 ms |
+
+  So most of the ~210 ms TTFB measured from Melbourne is network and TLS setup.
+- The 4 `ingest_run` events from the first Azure load are visible in `AppEvents`, so the
+  telemetry path the alert reads works.
+- **Ingest alert enabled** at 03:28 UTC (`az monitor scheduled-query update --disabled
+  false`). `infra/main.bicep` now defaults `ingestAlertEnabled` to true, so a re-run keeps it.
+- **Alert drill (T8):** at 03:28:58 UTC one synthetic `ingest_run` event was sent with
+  `source=alert-test`, `status=failed`, using the job's own `send_custom_event`. No data
+  was touched. The rule evaluates hourly over 2 h, so it should fire within an hour and
+  auto-resolve once the failed event leaves the window.
+- **T8: alert fired.** The Alerts Management API shows "NEMWeb ingest failed or stale"
+  fired at 03:44:30 UTC, Sev2, about 15.5 min after the synthetic event and on the rule's
+  first evaluation after it was enabled. Email delivery to the action group's address is
+  for the user to confirm. Expected auto-resolve: the first evaluation after the failed
+  event leaves the 2 h window (about 05:29 UTC).
+- First scheduled ingest: the 04:17 UTC cron run had not started by 04:44 UTC. GitHub can
+  delay schedules, especially right after a workflow first lands on the default branch.
+  Re-checked at about 05:35 UTC (next entry).
+- **Why no alert email arrived:** the action group's address was entered at the
+  `infra/deploy.sh` prompt with a domain typo (`outloo.com` for `outlook.com`). The alert
+  history shows `ActionsTriggered` at 03:44:32 UTC, not suppressed, so Azure sent the
+  email, but to the mistyped address. Fix: the user replaces the receiver with
+  `az monitor action-group update` and confirms with
+  `az monitor action-group test-notifications create`. Nothing in the templates changes:
+  `deploy.sh` asks for the address on every run and stores it nowhere.
+- Receiver fixed at about 04:49 UTC (`az monitor action-group update`; status Enabled).
+- `az monitor action-group test-notifications create` is refused on this subscription
+  (`Conflict: Free subscription not supported`), so delivery is verified with a real
+  notification instead: the drill alert's auto-resolve email.
+- The scheduled 04:17 UTC ingest still had not started at 04:50, so one manual run was
+  dispatched (39201523528). It records a successful SCADA import inside the 2 h window,
+  letting the alert resolve at the first evaluation after about 05:29 UTC.
+- 05:50 UTC: the alert was still Fired. Running its query by hand gave `failedRuns = 0,
+  scadaSuccesses = 1`, so the condition had cleared. Microsoft's rule for stateful log
+  alerts at a 15-minute to 11-hour frequency: resolve after **two** consecutive evaluations
+  without a match ([alerts overview](https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/alerts-overview)).
+  Expected resolve: the 06:44 UTC evaluation, which also sends the Resolved email.
+- Scheduled ingest still not started at 05:34 UTC: no `schedule` event runs, with the
+  workflow active and registered since 03:18 UTC.
+- **Alert resolved** at 06:45:30 UTC (`MonitorConditionChange`), with `ActionsTriggered`
+  at 06:45:31, i.e. the Resolved notification went to the corrected address. That is the
+  second clean hourly evaluation, as Microsoft's rule predicts. T8 is met on the Azure
+  side: fire → actions → auto-resolve → actions. Email receipt is for the user to confirm.
+- Scheduled ingest: the 04:17, 05:17 and 06:17 UTC slots all passed without a `schedule`
+  run. githubstatus.com showed no incident since 2026-10-17, and Actions was
+  "operational". The workflow is active and the cron is valid; the cause is not yet known.
+- **T8 met:** the user confirmed the Resolved alert email arrived at the corrected address.
+  The full chain works: ingest event → App Insights → log alert → action group → email.
+  Firing took 15.5 min from the event, on the rule's first hourly evaluation. Auto-resolve
+  took two clean evaluations.
+- **Schedule fix (user's choice, option 1):** `ingest.yml` cron changed from
+  `17 * * * *` to `7,37 * * * *`. That is two slots an hour, off the top of the hour, and
+  editing the cron re-registers the schedule on the default branch. Wording that said
+  "hourly" was updated in the README, the overview footnote and the Bicep description. If
+  scheduled runs still do not start, the fallback is an Azure-side timer that calls
+  `workflow_dispatch`.
