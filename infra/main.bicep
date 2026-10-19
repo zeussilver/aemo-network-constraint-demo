@@ -67,3 +67,5 @@ output deployIdentityName string = app.outputs.deployIdentityName
 output deployIdentityClientId string = app.outputs.deployIdentityClientId
 output webAppPrincipalId string = app.outputs.webAppPrincipalId
 output appInsightsName string = app.outputs.appInsightsName
+output functionAppName string = app.outputs.functionAppName
+output functionPrincipalId string = app.outputs.functionPrincipalId

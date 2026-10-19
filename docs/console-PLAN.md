@@ -789,3 +789,89 @@ NEMWeb. An hourly run fetches about 12.
   "hourly" was updated in the README, the overview footnote and the Bicep description. If
   scheduled runs still do not start, the fallback is an Azure-side timer that calls
   `workflow_dispatch`.
+- After PR #3 merged (`609a6db`, 07:02 UTC; deploy 39213461955 and CI green; the
+  post-deploy ingest loaded 28 SCADA files), the 07:07 and 07:37 slots also produced no
+  `schedule` run. That makes 5 missed slots across two cron strings.
+- Repo checks: Actions enabled with all actions allowed; `production` environment has no
+  protection rules or branch policy; all 3 workflows active; repo not archived or disabled.
+  The cause is on GitHub's side and not visible from the repo. Decision needed on a
+  scheduler outside GitHub.
+- **Real staleness alert:** with no `schedule` run and no ingest after the 07:10 post-deploy
+  run, the rule fired at 09:44:32 UTC ("Fired: Sev2 … NEMWeb ingest failed or stale"), and
+  the user received the email. At 10:26 UTC `/api/ready` reported `degraded` with SCADA 3.3 h
+  old (limit 2 h). The monitoring caught an actual pipeline outage, not just the drill.
+  Manual ingest dispatched at 10:27 UTC (39237625007).
+- **F1 cold start:** after about 3 h with no traffic, the first `/api/ready` request took
+  more than 60 s. It overran a 60 s tool timeout, so the exact time was not captured. The
+  next `/api/health` took 400 ms. The 25-minute idle probe earlier saw no cold start, so the
+  unload happens somewhere between 25 min and 3 h of idle.
+
+### 2026-10-19 — Option A (Azure Functions timer): availability and cost, before creating
+User's choice: run the ingest inside Azure on a Functions timer, using the managed
+identity for the database. Nothing is created until the user approves the cost.
+
+**Availability (newzealandnorth):**
+- `az functionapp list-flexconsumption-locations` includes newzealandnorth.
+- Flex Consumption Python 3.10–3.14 is offered there. 3.13 matches CI.
+- Instance sizes: 512, 2048, 4096 MB.
+- Azure for Students regional Flex quota: 15 cores (docs). One 2048 MB instance uses 1 core.
+
+**Prices (Retail Prices API, newzealandnorth, USD):**
+
+| Meter | Price |
+|---|---|
+| Flex On Demand execution time | $0.000039 per GB-s |
+| Flex On Demand executions | $0.000004 per 10 ($0.40 per million) |
+| Blob Hot LRS stored | $0.02 per GB-month |
+| Blob Hot LRS write ops | $0.05775 per 10K |
+| Blob Hot LRS read and other ops | $0.00462 per 10K |
+
+The on-demand free grant (100,000 GB-s + 250,000 executions per month) applies "on paid,
+consumption subscriptions only" (pricing page). It may not cover Azure for Students, so
+the estimate assumes no grant.
+
+**Estimate.** These usage numbers are assumptions, measured after deployment:
+- A run that finds only new SCADA files takes about 20 s.
+- The once-a-day dispatch + intermittent + forecast run takes about 120 s more.
+- Instance memory is 2048 MB. 512 MB is too small for the forecast's pandas frames.
+
+| Schedule | GB-s / month | Execution cost | Storage + ops | Total |
+|---|---|---|---|---|
+| every 30 min (1,440 runs) | ≈ 64,800 | ≈ $2.53 | < $0.50 | ≈ $3/month |
+| hourly (720 runs) | ≈ 36,000 | ≈ $1.40 | < $0.50 | ≈ $2/month |
+
+If the free grant does apply, execution cost is $0. The spending limit stays On.
+- **Built (branch `ingest-on-functions`):**
+  - `functions/function_app.py`: timer at `0 12 * * * *` UTC.
+  - `functions/ingest_job.py`: managed-identity token as the psycopg password, temp-dir
+    cache, raises on a failed source.
+  - `infra/ingest-function.bicep`: storage account with shared-key access off, Flex FC1
+    plan, Python 3.13 app with 2048 MB and max 1 instance, identity-based
+    `AzureWebJobsStorage`, blob/queue/table data roles.
+  - `deploy.yml` job `deploy-function`: Linux cp313 wheels via `pip --target`, zip deploy,
+    then checks the trigger is registered. It runs after the job that creates the function's
+    DML-only database role.
+  - `ingest.yml`: manual dispatch only.
+  - `deploy.sh`: registers `Microsoft.Storage`, which was not registered before, and sets
+    `AZURE_FUNCTION_NAME` and `AZURE_FUNCTION_PRINCIPAL_ID`.
+- **Checks:**
+  - pytest 125 passed (+6 over main's 119: 5 function-job tests, 1 password-separate
+    `Store` test).
+  - Every pinned dependency has a manylinux cp313 wheel (27 wheels, 81 MB).
+  - `az bicep build`: 0 warnings.
+  - What-if: 10 creates (storage account, blob service, container, 3 role assignments, Flex
+    plan, function app, 2 basic-auth policies). The 4 "Modify" entries are what-if noise:
+    unresolved principal reference, server-side read-only Postgres properties, App
+    Insights flow fields, web app siteConfig the GET omits.
+- **Function resources created:** the user re-ran `infra/deploy.sh`, and deployment
+  `siteops-20261020011558` succeeded in 4 min 50 s (the first attempt stopped at the
+  prompt without changes).
+  - `func-siteops-coxh2t`: Python 3.13, 2048 MB, max 1 instance.
+  - `stsiteopscoxh2t`: shared key off, TLS 1.2, no public blob.
+  - Storage roles present: Blob Data Owner, Queue Data Contributor, Table Data Contributor.
+  - Alert receiver `…@outlook.com` correct.
+- **Privacy fix before merging:** the user chose personal addresses as console sign-in
+  emails. `deploy.sh` stored them as Actions *variables*, which public-repo logs print in
+  clear. `deploy.yml` now reads `secrets.SEED_ADMIN_EMAIL` / `secrets.SEED_VIEWER_EMAIL`
+  (masked) and `deploy.sh` sets them as secrets. No deploy had run with the personal
+  addresses, so nothing was exposed.
