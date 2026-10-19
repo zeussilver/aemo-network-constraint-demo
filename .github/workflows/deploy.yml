@@ -1,0 +1,141 @@
+name: Deploy
+
+# Build the console, migrate the Azure database, deploy to App Service, then load any new
+# NEMWeb data. Signs in to Azure with GitHub OIDC (no stored Azure secret) and to the
+# database with an Entra token (the database has no password login).
+on:
+  push:
+    # ops-console deploys until it is merged; after that, main only.
+    branches: [main, ops-console]
+    paths:
+      - console/**
+      - infra/**
+      - src/**
+      - data/site_registry.csv
+      - requirements-ingest.txt
+      - .github/workflows/deploy.yml
+      - .github/workflows/ingest.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build standalone bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: console
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Build-time placeholder: pages are dynamic, so nothing connects during the build.
+      DATABASE_URL: postgresql://build:build@localhost:5432/build
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Zip the standalone server (static assets copied in by postbuild)
+        run: cd .next/standalone && zip -qr "$GITHUB_WORKSPACE/site-ops-console.zip" .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: site-ops-console
+          path: site-ops-console.zip
+          retention-days: 7
+
+  deploy:
+    name: Migrate and deploy
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      WEBAPP: ${{ vars.AZURE_WEBAPP_NAME }}
+      PG_SERVER: ${{ vars.AZURE_PG_SERVER }}
+      PG_HOST: ${{ vars.AZURE_PG_HOST }}
+      PG_USER: ${{ vars.AZURE_DEPLOY_IDENTITY_NAME }}
+      RULE: gh-deploy-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Install Prisma CLI and seed dependencies
+        working-directory: console
+        run: npm ci
+      - uses: actions/download-artifact@v8
+        with:
+          name: site-ops-console
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Allow this runner through the database firewall
+        run: |
+          ip="$(curl -fsS https://api.ipify.org)"
+          az postgres flexible-server firewall-rule create -g "$RG" -n "$PG_SERVER" --rule-name "$RULE" \
+            --start-ip-address "$ip" --end-ip-address "$ip" --output none
+      - name: Migrate, grant the app role, seed
+        working-directory: console
+        env:
+          SEED_ADMIN_EMAIL: ${{ vars.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+          SEED_VIEWER_EMAIL: ${{ vars.SEED_VIEWER_EMAIL }}
+          SEED_VIEWER_PASSWORD: ${{ secrets.SEED_VIEWER_PASSWORD }}
+          APP_PRINCIPAL_ID: ${{ vars.AZURE_WEBAPP_PRINCIPAL_ID }}
+        run: |
+          token="$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)"
+          echo "::add-mask::$token"
+          export DATABASE_URL="postgresql://${PG_USER}:${token}@${PG_HOST}:5432/ops_console?sslmode=require"
+          npx prisma migrate deploy
+          export PGPASSWORD="$token"
+          psql "host=$PG_HOST dbname=postgres user=$PG_USER sslmode=require" -v ON_ERROR_STOP=1 -q \
+            -v app_role="$WEBAPP" -v app_oid="$APP_PRINCIPAL_ID" -f ../infra/sql/app-role-create.sql
+          psql "host=$PG_HOST dbname=ops_console user=$PG_USER sslmode=require" -v ON_ERROR_STOP=1 -q \
+            -v app_role="$WEBAPP" -f ../infra/sql/app-role-grants.sql
+          npx prisma db seed
+      - name: Remove the firewall rule
+        if: always()
+        run: az postgres flexible-server firewall-rule delete -g "$RG" -n "$PG_SERVER" --rule-name "$RULE" --yes --output none || true
+      - name: Deploy to App Service
+        run: az webapp deploy -g "$RG" -n "$WEBAPP" --src-path site-ops-console.zip --type zip --timeout 600000 --output none
+      - name: Smoke test
+        run: |
+          url="https://${WEBAPP}.azurewebsites.net"
+          # Free tier cold start: allow a few minutes for the first response.
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 30 "$url/api/health"; then echo; break; fi
+            [ "$attempt" = 30 ] && { echo "::error::$url/api/health never answered"; exit 1; }
+            sleep 10
+          done
+          # Readiness reports data freshness; 503 is expected until the first ingest finishes.
+          curl -sS --max-time 30 -o ready.json -w "ready: HTTP %{http_code}\n" "$url/api/ready"; cat ready.json; echo
+
+  ingest:
+    name: Load new NEMWeb data
+    needs: deploy
+    uses: ./.github/workflows/ingest.yml
+    with:
+      trigger: backfill
+    permissions:
+      contents: read
+      id-token: write
