@@ -6,8 +6,9 @@
 export async function register() {
   const connectionString = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING;
   if (process.env.NEXT_RUNTIME !== "nodejs" || !connectionString) return;
-  const { useAzureMonitor } = await import("@azure/monitor-opentelemetry");
-  useAzureMonitor({
+  // Aliased: the SDK's "use" prefix is not a React hook, but the hooks lint rule treats it as one.
+  const { useAzureMonitor: startAzureMonitor } = await import("@azure/monitor-opentelemetry");
+  startAzureMonitor({
     azureMonitorExporterOptions: { connectionString },
     enableLiveMetrics: false,
   });
