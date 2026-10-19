@@ -1,12 +1,95 @@
 # AEMO DUID Network Constraint Forecast Demo
 
-A compact, GitHub-ready demo for a Proa Analytics internship application.
+Solar and wind farms in Australia's National Electricity Market are regularly held back by
+network constraints, and the people who operate them need to see it coming and see it
+happen. This repository works on both halves with AEMO's public NEMWeb data.
 
-The demo answers a narrow but realistic question:
+The forecasting half answers a narrow but realistic question:
 
 > For a given AEMO Dispatchable Unit ID (`DUID`), forecast the next 1–72 hours in which network-related generic constraints are likely to bind.
 
-It uses AEMO public NEMWeb data for dispatch labels and constraint mapping, adds weather/time features, trains a small ML classifier, and exposes the result two ways: a queryable FastAPI endpoint and an MCP server an agent can call directly.
+It uses AEMO public NEMWeb data for dispatch labels and constraint mapping, adds weather/time features, trains a small ML classifier, and exposes the result three ways: a queryable FastAPI endpoint, an MCP server an agent can call directly, and the risk card in the site ops console below.
+
+---
+
+## Site ops console
+
+A staff console (`console/`) for managing customers, sites and DUIDs and watching each site's
+operations, deployed on Azure: **https://siteops-console-coxh2t.azurewebsites.net** (staff
+sign-in; accounts are created by an administrator).
+
+![Cathedral Rocks on 17 Oct 2026: the semi-dispatch cap held the dispatch target near zero for most of the day while available output stayed at 10-20 MW](docs/images/console-site-cathedral-rocks.png)
+
+*Real data: Cathedral Rocks (CATHROCK), trading day 2026-10-17. Shaded bands are intervals
+where AEMO applied the semi-dispatch cap; the estimate puts the curtailed energy at
+181.4 MWh across 120 capped intervals.*
+
+- **Manage**: customers, sites and AEMO DUIDs with create, edit and archive.
+  - Two roles, admin and viewer, from one permission table that every server-side data
+    function checks.
+  - Optimistic concurrency on edits.
+  - An audit row written in the same transaction as each change.
+  - A DUID can only be attached if it is in the AEMO registry and matches the site's
+    region and fuel.
+- **Watch**, per trading day:
+  - actual output (SCADA) against available output (UIGF) and the dispatch target;
+  - a curtailment estimate;
+  - which forecast AEMO dispatch used (the participant's self-forecast or AWEFS/ASEFS),
+    and how many submissions were suppressed;
+  - the constraint-risk forecast from this repository's model.
+
+  Every data source shows its age.
+- **Data**: 12 real AEMO-registered solar and wind DUIDs across NSW, QLD, SA and VIC. All
+  operational numbers are public NEMWeb data. **Customers are synthetic** and labelled so
+  in the UI and the database.
+
+```mermaid
+flowchart LR
+  NEMWeb[(AEMO NEMWeb)] -->|hourly, GitHub Actions + Python| Ingest[ops_ingest]
+  Ingest -->|Entra token| DB[(Azure PostgreSQL 17)]
+  Ingest -->|ingest_run events| AI[App Insights]
+  App[Next.js 16 on App Service] -->|managed identity token| DB
+  App -->|OpenTelemetry| AI
+  AI -->|log alert| Mail[email]
+  Staff((staff)) --> App
+```
+
+| Area | What is used |
+|---|---|
+| App | Next.js 16 App Router, React 19, TypeScript, Tailwind, Recharts |
+| Data | PostgreSQL 17, Prisma 7 (migrations own every table, including those the Python job writes) |
+| Auth | Better Auth (email + password, no public sign-up), role-based access in `lib/rbac.ts` |
+| Pipeline | Python: a streaming reader for AEMO multi-table CSV zips, idempotent per-file loads |
+| Tests | pytest, Vitest (unit and Postgres integration), Playwright against the production build |
+| Delivery | GitHub Actions CI; deploy via OIDC (no Azure secret stored); Bicep for all infrastructure |
+| Operations | App Insights, `/api/health`, `/api/ready` (data freshness), ingest-failure log alert |
+
+**Measured** (details and sources in [docs/console-PLAN.md](docs/console-PLAN.md#11-progress-log)):
+
+| | |
+|---|---|
+| Tests in CI | 119 pytest, 46 Vitest, 8 Playwright |
+| Data on Azure after the first load | 105,384 SCADA readings, 103,680 dispatch intervals, 65,943 forecast-origin rows |
+| Push to deployed and healthy | 6 min 26 s (build 48 s, migrate + deploy + smoke test 5 min 36 s) |
+| SCADA vs dispatch `INITIALMW` cross-check | median absolute difference 0.0 MW over 100,224 intervals |
+| Public endpoints from Melbourne, warm | `/api/health` p95 282 ms, `/api/ready` p95 491 ms |
+
+**Security choices**:
+- The database has **no password login**. The web app signs in with its managed identity
+  and gets data access only (no DDL).
+- GitHub Actions signs in to Azure with OIDC federation, scoped to one resource group, and
+  to the database with an Entra token.
+- The only secrets anywhere are the console accounts' passwords.
+
+**Region**: New Zealand North. The Azure for Students subscription used here only allows
+five regions, none of them in Australia, and this is the closest. Everything runs on free
+tiers: App Service F1, PostgreSQL B1MS under the 12-month free offer, Log Analytics with a
+0.1 GB/day cap. The one log alert rule costs US$0.50/month once enabled.
+
+Run it locally: [console/README.md](console/README.md). Deploy it: `infra/deploy.sh`, then
+push.
+
+<!-- ### Decisions: written by the repository author; uncomment the heading when it has content. -->
 
 ---
 
@@ -117,8 +200,16 @@ This is intentionally simple and auditable. The real production version should r
 .
 ├── README.md
 ├── requirements.txt
+├── requirements-ingest.txt      # pinned deps for the hourly ingest job
+├── docker-compose.yml           # local Postgres for the console and ingest
 ├── app.py
 ├── run_mcp_server.py
+├── console/                     # Next.js site ops console (see console/README.md)
+├── infra/                       # Bicep + deploy.sh + database role SQL for Azure
+├── .github/workflows/           # ci.yml, deploy.yml, ingest.yml
+├── data/
+│   ├── console_duids.txt        # the console's 12 DUIDs
+│   └── site_registry.csv        # AEMO registry rows for them (scripts/build_site_registry.py)
 ├── application/
 │   ├── interview_talking_points.md
 │   ├── project_summary.md
@@ -129,7 +220,9 @@ This is intentionally simple and auditable. The real production version should r
 │   ├── benchmark_models.py
 │   ├── backtest_horizon_model.py
 │   ├── find_constrained_duids.py
-│   └── train_lead_time_models.py
+│   ├── train_lead_time_models.py
+│   ├── build_site_registry.py
+│   └── ops_data_checks.py
 ├── tests/
 │   ├── test_aemo_client.py
 │   ├── test_api.py
@@ -140,7 +233,10 @@ This is intentionally simple and auditable. The real production version should r
 │   ├── test_frames.py
 │   ├── test_lead_time_models.py
 │   ├── test_mcp_server.py
+│   ├── test_nemweb_stream.py
 │   ├── test_notebook_readme.py
+│   ├── test_ops_ingest.py
+│   ├── test_site_registry.py
 │   ├── test_train.py
 │   └── test_weather.py
 └── src/aemo_constraint_demo/
@@ -150,7 +246,10 @@ This is intentionally simple and auditable. The real production version should r
     ├── weather.py           # Open-Meteo history/forecast helpers
     ├── train.py             # CLI model training
     ├── forecast.py          # model-bundle query logic
-    └── mcp_server.py        # MCP tools over the same pipeline
+    ├── mcp_server.py        # MCP tools over the same pipeline
+    ├── site_registry.py     # AEMO registry rows for the console's sites
+    ├── nemweb_stream.py     # row-streaming reader for large AEMO zips
+    └── ops_ingest.py        # NEMWeb → Postgres loader for the console
 ```
 
 ---

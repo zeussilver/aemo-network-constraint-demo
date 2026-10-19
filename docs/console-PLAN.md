@@ -652,3 +652,62 @@ storage and 32 GB backup storage. The page does not name regions. `resources.bic
 inside that allowance: B1MS, 32 GB storage with auto-grow off, 7-day local backups.
 Expected cost is therefore ≈ $0/month, plus ≤ $0.50 once the alert is enabled. This is
 confirmed against Cost Management one to two days after creation.
+
+### 2026-10-19 — C4 deployed
+- The user ran `infra/deploy.sh`.
+  - Subscription deployment `siteops-20261019121250` succeeded, all in newzealandnorth.
+  - Database: PostgreSQL 17 B1MS, 32 GB, Entra auth on, password auth off. Admins are the
+    user and the deploy identity.
+  - GitHub has 12 Actions variables and 2 secrets (console admin and viewer passwords).
+  - App Insights also created its free "Failure Anomalies" smart-detection rule.
+- First deploy run failed at the firewall step: the current az CLI takes `--server-name`
+  and `--name`, and `--rule-name` is gone. CI failed on the React hooks lint rule
+  flagging `useAzureMonitor`. Both fixed in `aaf1ec8`.
+  - My local lint check had piped into `tail`, which hid the exit code; checks are now
+    run without pipes.
+- Deploy run 39186569586 succeeded:
+  - build: 48 s;
+  - migrate + app role + seed + zip deploy + smoke test: 5 min 36 s;
+  - first Azure ingest: 21 min 42 s.
+
+  CI run 39186569358 is green.
+
+| Source (Azure backfill, GitHub runner) | Files | Rows | Downloaded | Seconds |
+|---|---|---|---|---|
+| SCADA | 459 | 105,384 | 36.3 MB | 825 |
+| Dispatch | 30 | 103,680 | 255.0 MB | 189 |
+| Intermittent | 7 | 65,943 | 285.3 MB | 100 |
+| Forecast | 1 bundle | 1 snapshot | — | 16 |
+
+SCADA is slow from a US-hosted runner because it is 459 small files fetched serially from
+NEMWeb. An hourly run fetches about 12.
+
+- **Live:** https://siteops-console-coxh2t.azurewebsites.net.
+  - `/api/ready` returns 200: the web app reached PostgreSQL with its managed identity
+    token, and all four sources are fresh (SCADA newest interval 0.36 h old at the check).
+  - Anonymous `/` redirects to `/login`.
+  - T7 (push → deployed and healthy in ≤ 10 min) met: build + deploy took 6 min 26 s
+    before the ingest job started.
+- **Public endpoints, warm,** measured from Melbourne to New Zealand North: 50 requests each
+  after 5 warm-ups, fresh TLS connection per request, mean TCP connect ≈ 51 ms.
+
+| Endpoint | TTFB p50 | TTFB p95 |
+|---|---|---|
+| `/api/health` | 213 ms | 282 ms |
+| `/login` | 221 ms | 270 ms |
+| `/api/ready` (DB queries) | 319 ms | 491 ms |
+
+- **T6** (signed-in site page) needs a console account, so the user runs
+  `console/scripts/measure-latency.sh`. It prompts for the password, stores nothing, and
+  rejects non-200 responses so redirects cannot pass for fast pages.
+- Local re-measurement with that script (standalone build on the M4 Pro, all 200s):
+  site page p50 23 / p95 25 ms, overview 64 / 65 ms, `/status` 10 / 12 ms. The earlier
+  local baseline (143 / 233 ms) was taken right after the 709 s backfill with the machine
+  busier; both are kept as measured.
+
+### 2026-10-19 — cold-start probe
+- The site had no traffic after the latency run ended (about 02:13 UTC).
+- At 02:38:55 UTC, after about 25 minutes idle, one `/api/health` request took 524 ms
+  TTFB. The next took 210 ms.
+- So at 25 minutes idle there was no multi-second cold start: the F1 app had not been
+  unloaded yet. A longer idle period may still unload it. That case is not measured.
