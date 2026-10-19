@@ -45,7 +45,7 @@ where AEMO applied the semi-dispatch cap; the estimate puts the curtailed energy
 
 ```mermaid
 flowchart LR
-  NEMWeb[(AEMO NEMWeb)] -->|hourly, GitHub Actions + Python| Ingest[ops_ingest]
+  NEMWeb[(AEMO NEMWeb)] -->|every 30 min, GitHub Actions + Python| Ingest[ops_ingest]
   Ingest -->|Entra token| DB[(Azure PostgreSQL 17)]
   Ingest -->|ingest_run events| AI[App Insights]
   App[Next.js 16 on App Service] -->|managed identity token| DB
@@ -200,7 +200,7 @@ This is intentionally simple and auditable. The real production version should r
 .
 ├── README.md
 ├── requirements.txt
-├── requirements-ingest.txt      # pinned deps for the hourly ingest job
+├── requirements-ingest.txt      # pinned deps for the scheduled ingest job
 ├── docker-compose.yml           # local Postgres for the console and ingest
 ├── app.py
 ├── run_mcp_server.py

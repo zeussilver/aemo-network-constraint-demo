@@ -1,10 +1,12 @@
 name: Ingest NEMWeb
 
-# Hourly load of NEMWeb data into the Azure database. Scheduled runs only start once this
-# file is on the default branch; until then the deploy workflow calls it after each deploy.
+# Load new NEMWeb data into the Azure database every 30 minutes. Scheduled runs only start
+# once this file is on the default branch; the deploy workflow also calls it after each deploy.
+# Two slots an hour, off the top of the hour: GitHub can delay or drop scheduled runs under
+# load, and the hourly slot (minute 17) never fired in its first three hours on main.
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       trigger:

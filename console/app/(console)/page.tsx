@@ -81,7 +81,7 @@ export default async function OverviewPage() {
         </tbody>
       </Table>
       <p className="mt-3 text-xs text-slate-500">
-        Latest actual: DISPATCH_UNIT_SCADA, loaded hourly. Curtailment estimate and self-forecast share: the most recent trading day in Next Day
+        Latest actual: DISPATCH_UNIT_SCADA, loaded every 30 minutes. Curtailment estimate and self-forecast share: the most recent trading day in Next Day
         Dispatch / Next_Day_Intermittent_DS, which AEMO publishes once a day. Customers are synthetic.
       </p>
     </>

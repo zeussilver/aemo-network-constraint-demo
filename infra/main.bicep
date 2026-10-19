@@ -34,7 +34,7 @@ param githubEnvironment string = 'production'
 @minLength(32)
 param betterAuthSecret string
 
-@description('Ingestion alert on/off. On by default: the hourly ingest schedule runs from the default branch.')
+@description('Ingestion alert on/off. On by default: the scheduled ingest runs from the default branch.')
 param ingestAlertEnabled bool = true
 
 resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
