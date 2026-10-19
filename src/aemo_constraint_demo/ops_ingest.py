@@ -568,7 +568,9 @@ def ingest_forecasts(
             if not dispatch_loaded and store.has_snapshot(bundle_duid):
                 log.info("forecast: no new dispatch data for %s; keeping the current snapshot", bundle_duid)
                 continue
-            payload = forecaster(model_path, duid=bundle_duid, source="cache", cache_dir=config.cache_dir)
+            # "auto": a fresh CI runner may hold fewer cached Next Day Dispatch days than the
+            # model's history window, so missing days are downloaded.
+            payload = forecaster(model_path, duid=bundle_duid, source="auto", cache_dir=config.cache_dir)
             snapshot = build_snapshot(payload, Path(model_path).name)
             store.save_snapshot(snapshot)
             result.files += 1
@@ -583,13 +585,52 @@ def ingest_forecasts(
 
 
 def emit_event(event: dict) -> None:
-    """One structured line per source run. App Insights export is added when configured."""
+    """One structured log line per source run, also sent to App Insights when configured."""
     log.info("ingest_run %s", json.dumps(event, default=str))
-    _telemetry_hook(event)
+    connection_string = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
+    if connection_string:
+        try:
+            send_custom_event(connection_string, "ingest_run", event)
+        except Exception as exc:  # noqa: BLE001 - telemetry must never fail the ingest
+            log.warning("Could not send ingest_run telemetry: %s", exc)
 
 
-def _telemetry_hook(event: dict) -> None:  # replaced in deployment by the App Insights exporter
-    return None
+NUMERIC_EVENT_FIELDS = ("files", "rows", "bytes", "seconds")
+
+
+def build_event_envelope(connection_string: str, name: str, event: dict, now: datetime | None = None) -> tuple[str, list]:
+    """App Insights track-API URL and payload for one custom event.
+
+    String fields become ``customDimensions``; counts become ``customMeasurements``. The
+    ingestion alert queries ``customEvents | where name == "ingest_run"``.
+    """
+    parts = dict(item.split("=", 1) for item in connection_string.split(";") if "=" in item)
+    ikey = parts.get("InstrumentationKey")
+    endpoint = parts.get("IngestionEndpoint", "https://dc.services.visualstudio.com/").rstrip("/")
+    if not ikey:
+        raise ValueError("APPLICATIONINSIGHTS_CONNECTION_STRING has no InstrumentationKey.")
+    stamp = (now or datetime.now().astimezone()).isoformat()
+    properties = {k: str(v) for k, v in event.items() if v is not None and k not in NUMERIC_EVENT_FIELDS}
+    measurements = {k: float(event[k]) for k in NUMERIC_EVENT_FIELDS if event.get(k) is not None}
+    envelope = {
+        "name": "Microsoft.ApplicationInsights.Event",
+        "time": stamp,
+        "iKey": ikey,
+        "tags": {"ai.cloud.role": "ops-ingest"},
+        "data": {
+            "baseType": "EventData",
+            "baseData": {"ver": 2, "name": name, "properties": properties, "measurements": measurements},
+        },
+    }
+    return f"{endpoint}/v2/track", [envelope]
+
+
+def send_custom_event(connection_string: str, name: str, event: dict) -> None:
+    import requests
+
+    url, payload = build_event_envelope(connection_string, name, event)
+    response = requests.post(url, json=payload, timeout=15)
+    response.raise_for_status()
 
 
 def run(database_url: str, sources: Sequence[str], config: IngestConfig) -> list[SourceResult]:

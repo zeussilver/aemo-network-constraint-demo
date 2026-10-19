@@ -124,6 +124,24 @@ def test_intermittent_rows_aggregate_origins_and_join_used_poe50(tmp_path: Path)
     assert by_origin["AWEFS_ASEFS"][3:] == (1, 0, 0, 304, 11.0)
 
 
+def test_event_envelope_targets_the_regional_endpoint_and_splits_fields() -> None:
+    connection = "InstrumentationKey=abc-123;IngestionEndpoint=https://newzealandnorth-0.in.applicationinsights.azure.com/;LiveEndpoint=x"
+    event = {"event": "ingest_run", "source": "scada", "status": "failed", "rows": 12, "files": 1, "seconds": 3.5, "error": None}
+
+    url, payload = ops_ingest.build_event_envelope(connection, "ingest_run", event, now=nem("2026-10-19 10:00"))
+
+    assert url == "https://newzealandnorth-0.in.applicationinsights.azure.com/v2/track"
+    base = payload[0]["data"]["baseData"]
+    assert payload[0]["iKey"] == "abc-123" and base["name"] == "ingest_run"
+    assert base["properties"] == {"event": "ingest_run", "source": "scada", "status": "failed"}
+    assert base["measurements"] == {"files": 1.0, "rows": 12.0, "seconds": 3.5}
+
+
+def test_emit_event_never_raises_when_telemetry_fails(monkeypatch) -> None:
+    monkeypatch.setenv("APPLICATIONINSIGHTS_CONNECTION_STRING", "IngestionEndpoint=https://x/")  # no key
+    ops_ingest.emit_event({"event": "ingest_run", "source": "scada", "status": "success"})
+
+
 def test_build_snapshot_makes_payload_json_safe() -> None:
     payload = {
         "duid": "CATHROCK",

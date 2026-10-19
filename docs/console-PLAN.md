@@ -580,3 +580,75 @@ an M4 Pro, Postgres in Docker, real data; 50 warm requests after 5 warm-ups:
 - **Local totals:** pytest 117 passed (97 original + 20 new), Vitest 41 passed,
   Playwright 8 passed, brand guard clean. Raw migration SQL applied with psql to a fresh
   database builds all 16 tables.
+
+### 2026-10-19 — Azure preflight (read-only checks, nothing created)
+- Azure CLI 2.91.0 and Bicep 0.48.1 installed. The user ran `az login` themselves.
+- Subscription: Azure for Students (`quotaId AzureForStudents_2018-01-01`), spending limit **On**.
+  Tenant: the user's university directory. The user is **Owner** on the subscription, which
+  is enough for a user-assigned managed identity and a resource-group role assignment.
+- **Region blocker.** The subscription's "Allowed resource deployment regions" policy
+  allows only `newzealandnorth`, `koreacentral`, `indonesiacentral`, `eastasia` and
+  `japaneast`. Australia East and Australia Southeast are not on the list.
+- In all five allowed regions, the provider metadata lists App Service (serverFarms and
+  sites), PostgreSQL Flexible Server, Log Analytics, App Insights web tests and
+  user-assigned identities.
+- `az appservice list-locations --sku F1 --linux-workers-enabled` returns all five.
+- In New Zealand North, PostgreSQL Flexible lists `Standard_B1ms` and versions 13–18, and
+  scheduled query rules (log alerts) are supported.
+- Resource providers (Web, DBforPostgreSQL, Insights, OperationalInsights,
+  ManagedIdentity, AlertsManagement) are not registered yet. Registering them is part of C4.
+- Decision needed from the user: deploy in New Zealand North under this subscription, or
+  use a different subscription that allows Australia East.
+
+### 2026-10-19 — C4 prepared (nothing created yet)
+The user agreed to relax the region rule: deploy to **New Zealand North** under the Azure
+for Students subscription, and say why in the README. Design changes against Section 2,
+each to remove a stored secret:
+
+| Topic | Choice | Why |
+|---|---|---|
+| Database auth | PostgreSQL with **Microsoft Entra auth only**, password login disabled | No database password exists to store, rotate or leak |
+| App → database | The web app's **system-assigned identity**; `lib/prisma.ts` passes pg a token function (`lib/entra-token.ts`, cached, refreshed 5 min early) | Least privilege: `infra/sql/app-role-*.sql` grants DML only, no DDL |
+| CI → Azure / database | One user-assigned identity, federated with `repo:…:environment:production`. Contributor on the resource group only. Entra admin on the database for migrations and ingest | No Azure secret in GitHub |
+| App Insights in CI | Connection string read at run time with `az resource show` | No GitHub secret for it |
+| GitHub secrets left | `SEED_ADMIN_PASSWORD` (+ optional `SEED_VIEWER_PASSWORD`), typed by the user in `infra/deploy.sh` | Console sign-in passwords are the user's to choose |
+| Ingest telemetry | `ops_ingest` posts each source run as an App Insights custom event `ingest_run` (track API, no new dependency) | The log alert queries `customEvents` |
+| Alert schedule | Log alert every 1 h over 2 h: fires on any failed run or no successful SCADA run. **Created disabled** until the hourly schedule runs from `main` (GitHub only schedules default-branch workflows) | Avoids alert emails during the deploy-only period |
+
+Files:
+- `infra/main.bicep` (subscription scope), `infra/resources.bicep`, `infra/postgres-admin.bicep`;
+- `infra/deploy.sh` (the user runs it; `--what-if` previews);
+- `.github/workflows/deploy.yml` (build → migrate/grant/seed → zip deploy → smoke test →
+  ingest) and `.github/workflows/ingest.yml` (hourly, plus `workflow_call` from deploy);
+- `requirements-ingest.txt` (6 pinned packages);
+- `console/instrumentation.ts` (Azure Monitor OpenTelemetry, only when the connection
+  string is set).
+
+Checks:
+- `az bicep build`: 0 warnings.
+- `az deployment sub what-if` in newzealandnorth (read-only, placeholder alert email)
+  lists 16 creates. The deploy identity's database-admin entry shows as "Unsupported"
+  because its object ID only exists at creation time.
+- No policy denial.
+- Vitest 46 (+5 token tests), Playwright 8, pytest 119 (+2 telemetry tests).
+- Standalone bundle: 77 MB.
+
+**Prices (Azure Retail Prices API, newzealandnorth, USD, 2026-10-19):**
+
+| Item | Price | Expected cost here |
+|---|---|---|
+| App Service F1 Linux | $0 | $0 |
+| PostgreSQL Flexible B1MS compute | $0.0273/h | $0 under the 750 h/month free offer if it applies; otherwise ≈ $19.93/month |
+| PostgreSQL storage, 32 GB | $0.1449/GB-month | $0 under the free offer; otherwise ≈ $4.64/month |
+| Log Analytics ingestion | first 5 GB/month free, then $3.507/GB | $0 (daily cap 0.1 GB) |
+| Log search alert, 1 rule | $0.50/month (15-minute-or-slower meter) | ≤ $0.50/month once enabled |
+| Identity, federation, role assignment, firewall rules, action group email | — | $0 |
+
+Spending limit is On, so charges stop at the student credit.
+
+Portal check by the user (2026-10-19, "Free services", 12-month amounts): the offer lists
+Azure Database for PostgreSQL at 750 hours of Flexible Server Burstable B1MS, 32 GB
+storage and 32 GB backup storage. The page does not name regions. `resources.bicep` stays
+inside that allowance: B1MS, 32 GB storage with auto-grow off, 7-day local backups.
+Expected cost is therefore ≈ $0/month, plus ≤ $0.50 once the alert is enabled. This is
+confirmed against Cost Management one to two days after creation.

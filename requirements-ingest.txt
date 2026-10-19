@@ -1,0 +1,8 @@
+# Minimal, pinned dependencies for the scheduled ops ingest job (.github/workflows/ingest.yml).
+# Versions are the ones the local backfill and the committed model bundles were verified with.
+joblib==1.5.3
+numpy==2.4.6
+pandas==3.0.3
+psycopg[binary]==3.3.6
+requests==2.34.2
+scikit-learn==1.7.2
