@@ -45,8 +45,8 @@ where AEMO applied the semi-dispatch cap; the estimate puts the curtailed energy
 
 ```mermaid
 flowchart LR
-  NEMWeb[(AEMO NEMWeb)] -->|every 30 min, GitHub Actions + Python| Ingest[ops_ingest]
-  Ingest -->|Entra token| DB[(Azure PostgreSQL 17)]
+  NEMWeb[(AEMO NEMWeb)] -->|hourly, Python on an Azure Functions timer| Ingest[ops_ingest]
+  Ingest -->|managed identity token| DB[(Azure PostgreSQL 17)]
   Ingest -->|ingest_run events| AI[App Insights]
   App[Next.js 16 on App Service] -->|managed identity token| DB
   App -->|OpenTelemetry| AI
@@ -59,7 +59,7 @@ flowchart LR
 | App | Next.js 16 App Router, React 19, TypeScript, Tailwind, Recharts |
 | Data | PostgreSQL 17, Prisma 7 (migrations own every table, including those the Python job writes) |
 | Auth | Better Auth (email + password, no public sign-up), role-based access in `lib/rbac.ts` |
-| Pipeline | Python: a streaming reader for AEMO multi-table CSV zips, idempotent per-file loads |
+| Pipeline | Python on an hourly Azure Functions timer (Flex Consumption): a streaming reader for AEMO multi-table CSV zips, idempotent per-file loads |
 | Tests | pytest, Vitest (unit and Postgres integration), Playwright against the production build |
 | Delivery | GitHub Actions CI; deploy via OIDC (no Azure secret stored); Bicep for all infrastructure |
 | Operations | App Insights, `/api/health`, `/api/ready` (data freshness), ingest-failure log alert |
@@ -68,23 +68,27 @@ flowchart LR
 
 | | |
 |---|---|
-| Tests in CI | 119 pytest, 46 Vitest, 8 Playwright |
+| Tests in CI | 125 pytest, 46 Vitest, 8 Playwright |
 | Data on Azure after the first load | 105,384 SCADA readings, 103,680 dispatch intervals, 65,943 forecast-origin rows |
 | Push to deployed and healthy | 6 min 26 s (build 48 s, migrate + deploy + smoke test 5 min 36 s) |
 | SCADA vs dispatch `INITIALMW` cross-check | median absolute difference 0.0 MW over 100,224 intervals |
 | Public endpoints from Melbourne, warm | `/api/health` p95 282 ms, `/api/ready` p95 491 ms |
+| First hourly ingest run on Azure Functions | 8.4 s; 7 new SCADA files (84 rows), no errors |
 
 **Security choices**:
-- The database has **no password login**. The web app signs in with its managed identity
-  and gets data access only (no DDL).
+- The database has **no password login**. The web app and the ingest function sign in
+  with their managed identities and get data access only (no DDL). The function's storage
+  account rejects shared-key access.
 - GitHub Actions signs in to Azure with OIDC federation, scoped to one resource group, and
   to the database with an Entra token.
 - The only secrets anywhere are the console accounts' passwords.
 
 **Region**: New Zealand North. The Azure for Students subscription used here only allows
-five regions, none of them in Australia, and this is the closest. Everything runs on free
-tiers: App Service F1, PostgreSQL B1MS under the 12-month free offer, Log Analytics with a
-0.1 GB/day cap. The one log alert rule costs US$0.50/month once enabled.
+five regions, none of them in Australia, and this is the closest. The web app and database run
+on free tiers: App Service F1, PostgreSQL B1MS under the 12-month free offer, Log Analytics
+with a 0.1 GB/day cap. Two items are paid: the log alert rule (US$0.50/month) and the
+ingest function on Flex Consumption (estimated at US$2/month or less, assuming its free
+grant does not cover this subscription).
 
 Run it locally: [console/README.md](console/README.md). Deploy it: `infra/deploy.sh`, then
 push.

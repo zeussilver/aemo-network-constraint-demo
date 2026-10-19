@@ -98,7 +98,7 @@ points at `8.0.0-rc.23`, so the stable 7.x is pinned on purpose), `better-auth 1
 | ORM | Prisma 7.10.1 pinned, migrations own the schema | Drizzle: lighter, but Prisma is more widely used. Prisma 8 is still RC |
 | UI | Tailwind 4 + a few shadcn/ui components, Recharts | MUI: heavier |
 | Forecast in the console | **Batch snapshot**: the ingest job calls `forecast_from_bundle` (same code as FastAPI) and stores the JSON per DUID | Live FastAPI on Azure: a second Python app on F1 would burn the CPU quota, and the forecast origin only moves once a day (Next Day Dispatch is daily), so live calls give nothing fresher. A local live-FastAPI mode was considered and not built |
-| Ingestion runtime | **Python job in GitHub Actions** (cron, free for public repos), reusing `aemo_client` | Inside Next.js on F1: a 40 MB Intermittent_DS file would blow the 60 CPU-min/day quota. Azure Functions: more moving parts |
+| Ingestion runtime | **Python job in GitHub Actions** (cron, free for public repos), reusing `aemo_client`. **Superseded 2026-10-19:** GitHub's schedule fired once in about 19 slots, so the job now runs on an hourly Azure Functions timer (progress log) | Inside Next.js on F1: a 40 MB Intermittent_DS file would blow the 60 CPU-min/day quota. Azure Functions: more moving parts |
 | DB access from Actions | Job adds its runner IP to the Postgres firewall, runs, then removes the rule (`if: always()`) | Open firewall to all IPs: simpler, weaker |
 | Deploy auth | GitHub OIDC → **user-assigned managed identity** with a federated credential, Contributor on the resource group only | Publish profile: needs SCM basic auth and a long-lived secret |
 | Infra | Bicep (`infra/main.bicep`) + `infra/deploy.sh`, which **the user runs** and which prompts for secrets | Portal clicks: not reproducible |
@@ -193,7 +193,8 @@ admin password. A read-only viewer account for reviewers is optional (the user d
   - Brand guard: fail if a third-party company name appears under `console/`.
 - `deploy.yml` (main): OIDC login → firewall rule → `prisma migrate deploy` → zip deploy
   of the standalone build → smoke test `/api/health`.
-- `ingest.yml`: hourly cron + manual dispatch.
+- `ingest.yml`: manual dispatch (backfill). The hourly run moved to an Azure Functions
+  timer, which `deploy.yml` deploys (progress log, 2026-10-19).
 
 ### Layout
 ```
@@ -274,6 +275,7 @@ The README and `docs/console-METRICS.md` report actual values even when a target
 | Log Analytics / App Insights | Free under 5 GB/month (this app will be far below) |
 | Log search alert rule (1) | Small monthly charge. Microsoft's USD page did not show the figure; third-party sources quote roughly US$0.50–1.50/month at 15-min frequency. Confirmed in the Azure pricing calculator and shown to you before creation; paid from the student credit |
 | Standard availability test (optional) | Per execution. Third-party rate US$0.0005 → 1 location every 15 min ≈ US$1.44/month. Confirmed before creation |
+| Azure Functions Flex Consumption (added 2026-10-19) | US$2/month or less for the hourly ingest, assuming the free grant does not apply (estimate in the progress log) |
 | GitHub Actions | Free (public repo) |
 
 After the demo period, you choose: keep or delete. Delete = one command,
@@ -875,3 +877,27 @@ If the free grant does apply, execution cost is $0. The spending limit stays On.
   clear. `deploy.yml` now reads `secrets.SEED_ADMIN_EMAIL` / `secrets.SEED_VIEWER_EMAIL`
   (masked) and `deploy.sh` sets them as secrets. No deploy had run with the personal
   addresses, so nothing was exposed.
+- GitHub schedule after the 07:02 UTC cron change: one `schedule` run (14:35:48 UTC,
+  success) out of about 19 slots up to 16:32 UTC. This confirms the move to Functions.
+  Manual dispatch at 16:33 UTC bridges until the function is deployed.
+
+### 2026-10-19 — function deployed, first timer run
+- PR #4 merged at 16:43:16 UTC (merge commit `5ae1555`) after all 6 checks passed. CI run
+  39287811049: pytest 125, Vitest 46, Playwright 8, runtime audit 0 vulnerabilities.
+- Deploy run 39287810990 took 8 min 44 s from push to the function registered:
+  - build 1 min 5 s;
+  - migrate, DML roles for the web app and the function, seed, web deploy, smoke test
+    4 min 32 s;
+  - function package and deploy 2 min 56 s (zip 119,832,895 bytes).
+- `az functionapp function list`: `nemweb_ingest`, timer trigger, `0 12 * * * *`.
+- First timer run at 17:12 UTC:
+  - the invocation succeeded in 8,445 ms with no exceptions;
+  - `ingest_run` events, all `trigger=schedule` from role `ops-ingest`: SCADA 7 files,
+    84 rows, 3.21 s; dispatch and intermittent 0 files; forecast 0 rows, 2.13 s.
+- The SCADA-only run took 8.4 s; the cost estimate assumed 20 s. The daily run (dispatch +
+  intermittent + forecast) is measured after the 19:12 UTC run.
+- Real stale-data alerts while the GitHub schedule was not firing:
+  - fired 09:44:32 → resolved 11:45:33, after the 10:27 manual run;
+  - fired 12:44:30 → resolved 15:45:36, after the 14:35 scheduled run.
+
+  No alert is open.
