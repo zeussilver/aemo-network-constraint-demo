@@ -1,0 +1,73 @@
+name: Ingest NEMWeb
+
+# Hourly load of NEMWeb data into the Azure database. Scheduled runs only start once this
+# file is on the default branch; until then the deploy workflow calls it after each deploy.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      trigger:
+        description: Label stored on the ingest_run rows
+        type: choice
+        options: [manual, backfill]
+        default: manual
+  workflow_call:
+    inputs:
+      trigger:
+        type: string
+        default: backfill
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ingest-production
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    name: Load NEMWeb data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      PG_SERVER: ${{ vars.AZURE_PG_SERVER }}
+      PG_HOST: ${{ vars.AZURE_PG_HOST }}
+      PG_USER: ${{ vars.AZURE_DEPLOY_IDENTITY_NAME }}
+      RULE: gh-ingest-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-ingest.txt
+      - run: pip install -r requirements-ingest.txt
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Allow this runner through the database firewall
+        run: |
+          ip="$(curl -fsS https://api.ipify.org)"
+          az postgres flexible-server firewall-rule create -g "$RG" --server-name "$PG_SERVER" --name "$RULE" \
+            --start-ip-address "$ip" --end-ip-address "$ip" --output none
+      - name: Run ops_ingest
+        env:
+          TRIGGER: ${{ inputs.trigger || (github.event_name == 'schedule' && 'schedule') || 'manual' }}
+        run: |
+          token="$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)"
+          echo "::add-mask::$token"
+          export APPLICATIONINSIGHTS_CONNECTION_STRING="$(az resource show -g "$RG" -n "${{ vars.AZURE_APPINSIGHTS_NAME }}" \
+            --resource-type Microsoft.Insights/components --query properties.ConnectionString -o tsv)"
+          echo "::add-mask::$APPLICATIONINSIGHTS_CONNECTION_STRING"
+          # Entra auth: the access token is the password; psycopg reads it from PGPASSWORD.
+          PGPASSWORD="$token" python -m src.aemo_constraint_demo.ops_ingest --trigger "$TRIGGER" \
+            --database-url "postgresql://${PG_USER}@${PG_HOST}:5432/ops_console?sslmode=require"
+      - name: Remove the firewall rule
+        if: always()
+        run: az postgres flexible-server firewall-rule delete -g "$RG" --server-name "$PG_SERVER" --name "$RULE" --yes --output none || true

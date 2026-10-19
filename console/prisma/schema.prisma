@@ -1,0 +1,308 @@
+// Ops console schema. Prisma migrations own every table, including the ops tables that
+// the Python ingest job (src/aemo_constraint_demo/ops_ingest.py) writes. Tables and
+// columns use snake_case names so the SQL the job runs stays readable.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Region {
+  NSW1
+  QLD1
+  VIC1
+  SA1
+  TAS1
+}
+
+enum Fuel {
+  SOLAR
+  WIND
+}
+
+enum CustomerStatus {
+  ACTIVE
+  ONBOARDING
+  INACTIVE
+}
+
+enum SiteStatus {
+  OPERATING
+  COMMISSIONING
+  DECOMMISSIONED
+}
+
+// ---------------------------------------------------------------------------------
+// Managed by staff in the console
+// ---------------------------------------------------------------------------------
+
+/// Customers are synthetic in this demo. `isSynthetic` is shown as a badge in the UI.
+
+model Customer {
+  id           String         @id @default(cuid())
+  name         String         @unique
+  contactEmail String         @map("contact_email")
+  status       CustomerStatus @default(ACTIVE)
+  notes        String?
+  isSynthetic  Boolean        @default(true) @map("is_synthetic")
+  archivedAt   DateTime?      @map("archived_at") @db.Timestamptz(3)
+  version      Int            @default(1)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sites        Site[]
+
+  @@map("customer")
+}
+
+model Site {
+  id                   String     @id @default(cuid())
+  customerId           String     @map("customer_id")
+  customer             Customer   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  name                 String
+  region               Region
+  fuel                 Fuel
+  registeredCapacityMw Float      @map("registered_capacity_mw")
+  status               SiteStatus @default(OPERATING)
+  archivedAt           DateTime?  @map("archived_at") @db.Timestamptz(3)
+  version              Int        @default(1)
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  units                Unit[]
+
+  @@index([customerId])
+  @@map("site")
+}
+
+/// Assigns an AEMO-registered DUID to a site. The foreign key to `registry_unit` means a
+/// DUID that AEMO standing data does not know cannot be saved.
+
+model Unit {
+  duid      String       @id
+  siteId    String       @map("site_id")
+  site      Site         @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  registry  RegistryUnit @relation(fields: [duid], references: [duid], onDelete: Restrict)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([siteId])
+  @@map("unit")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String   @map("actor_id")
+  actorEmail String   @map("actor_email")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  before     Json?
+  after      Json?
+  at         DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([entityType, entityId])
+  @@index([at])
+  @@map("audit_log")
+}
+
+// ---------------------------------------------------------------------------------
+// AEMO reference data, loaded from data/site_registry.csv
+// ---------------------------------------------------------------------------------
+
+model RegistryUnit {
+  duid                 String @id
+  stationName          String @map("station_name")
+  stationId            String @map("station_id")
+  region               Region @map("region_id")
+  fuel                 Fuel
+  technology           String
+  classification       String
+  scheduleType         String @map("schedule_type")
+  dispatchType         String @map("dispatch_type")
+  connectionPointId    String @map("connection_point_id")
+  registeredCapacityMw Float  @map("registered_capacity_mw")
+  maxCapacityMw        Float  @map("max_capacity_mw")
+  registrationListFile String @map("registration_list_file")
+  standingDataFile     String @map("standing_data_file")
+  unit                 Unit?
+
+  @@map("registry_unit")
+}
+
+// ---------------------------------------------------------------------------------
+// Operational data written by the Python ingest job. Times are NEM time (UTC+10).
+// ---------------------------------------------------------------------------------
+
+/// DISPATCH_UNIT_SCADA: MW at the start of the dispatch interval ending `settlementDate`.
+
+model ScadaReading {
+  duid           String
+  settlementDate DateTime @map("settlement_date") @db.Timestamptz(3)
+  mw             Float
+
+  @@id([duid, settlementDate])
+  @@map("scada_reading")
+}
+
+/// Next Day Dispatch DISPATCH,UNIT_SOLUTION. One row per interval: the highest
+/// INTERVENTION run when an intervention produced two.
+
+model DispatchSolution {
+  duid            String
+  settlementDate  DateTime @map("settlement_date") @db.Timestamptz(3)
+  intervention    Int
+  initialMw       Float?   @map("initial_mw")
+  totalCleared    Float?   @map("total_cleared")
+  availability    Float?
+  uigf            Float?
+  semidispatchCap Int?     @map("semidispatch_cap")
+
+  @@id([duid, settlementDate])
+  @@map("dispatch_solution")
+}
+
+/// INTERMITTENT_FORECAST_TRK joined to the POE50 of the forecast dispatch used.
+
+model ForecastUsed {
+  duid             String
+  settlementDate   DateTime  @map("settlement_date") @db.Timestamptz(3)
+  origin           String
+  forecastPriority Int       @map("forecast_priority")
+  offerDatetime    DateTime? @map("offer_datetime") @db.Timestamptz(3)
+  poe50            Float?
+
+  @@id([duid, settlementDate])
+  @@map("forecast_used")
+}
+
+/// INTERMITTENT_DS_RUN/PRED aggregated per interval and origin: how many submissions
+/// arrived, how many were suppressed, and the latest submission's POE50.
+
+model ForecastOriginInterval {
+  duid                  String
+  settlementDate        DateTime @map("settlement_date") @db.Timestamptz(3)
+  origin                String
+  submissions           Int
+  suppressedAemo        Int      @map("suppressed_aemo")
+  suppressedParticipant Int      @map("suppressed_participant")
+  maxPriority           Int      @map("max_priority")
+  latestPoe50           Float?   @map("latest_poe50")
+
+  @@id([duid, settlementDate, origin])
+  @@map("forecast_origin_interval")
+}
+
+/// Constraint-risk output of forecast_from_bundle, stored per DUID and forecast origin.
+
+model ForecastSnapshot {
+  duid         String
+  asOf         DateTime @map("as_of") @db.Timestamptz(3)
+  generatedAt  DateTime @map("generated_at") @db.Timestamptz(3)
+  horizonHours Int      @map("horizon_hours")
+  probability  Float
+  riskLevel    String   @map("risk_level")
+  dataLagHours Float?   @map("data_lag_hours")
+  modelFile    String   @map("model_file")
+  payload      Json
+
+  @@id([duid, asOf])
+  @@map("forecast_snapshot")
+}
+
+model IngestRun {
+  id              Int            @id @default(autoincrement())
+  source          String
+  trigger         String
+  status          String
+  startedAt       DateTime       @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt      DateTime?      @map("finished_at") @db.Timestamptz(3)
+  filesProcessed  Int            @default(0) @map("files_processed")
+  rowsWritten     Int            @default(0) @map("rows_written")
+  bytesDownloaded BigInt         @default(0) @map("bytes_downloaded")
+  latestInterval  DateTime?      @map("latest_interval") @db.Timestamptz(3)
+  error           String?
+  files           IngestedFile[]
+
+  @@index([source, startedAt])
+  @@map("ingest_run")
+}
+
+/// One row per NEMWeb file loaded, so a scheduled run only fetches files it has not seen.
+
+model IngestedFile {
+  source     String
+  fileName   String    @map("file_name")
+  runId      Int       @map("run_id")
+  run        IngestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  rows       Int
+  ingestedAt DateTime  @default(now()) @map("ingested_at") @db.Timestamptz(3)
+
+  @@id([source, fileName])
+  @@map("ingested_file")
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  role          String    @default("viewer")
+  sessions      Session[]
+  accounts      Account[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
