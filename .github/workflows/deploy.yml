@@ -5,8 +5,7 @@ name: Deploy
 # database with an Entra token (the database has no password login).
 on:
   push:
-    # ops-console deploys until it is merged; after that, main only.
-    branches: [main, ops-console]
+    branches: [main]
     paths:
       - console/**
       - infra/**
