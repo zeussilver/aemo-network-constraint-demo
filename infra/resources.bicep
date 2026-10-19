@@ -238,6 +238,21 @@ resource ftpBasicAuth 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@20
   properties: { allow: false }
 }
 
+// ---------------------------------------------------------------------------------------
+// Hourly ingest on Azure Functions
+// ---------------------------------------------------------------------------------------
+
+module ingestFunction 'ingest-function.bicep' = {
+  name: 'ingest-function'
+  params: {
+    location: location
+    suffix: suffix
+    postgresHost: postgres.properties.fullyQualifiedDomainName
+    databaseName: databaseName
+    appInsightsName: appInsights.name
+  }
+}
+
 output webAppName string = webApp.name
 output webAppUrl string = 'https://${webApp.properties.defaultHostName}'
 output webAppPrincipalId string = webApp.identity.principalId
@@ -246,3 +261,5 @@ output postgresHost string = postgres.properties.fullyQualifiedDomainName
 output deployIdentityName string = deployIdentity.name
 output deployIdentityClientId string = deployIdentity.properties.clientId
 output appInsightsName string = appInsights.name
+output functionAppName string = ingestFunction.outputs.functionAppName
+output functionPrincipalId string = ingestFunction.outputs.functionPrincipalId

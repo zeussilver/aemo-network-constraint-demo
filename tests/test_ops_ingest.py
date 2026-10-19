@@ -279,3 +279,20 @@ def test_ingest_forecasts_saves_a_snapshot_and_skips_without_new_dispatch(store,
     with store.conn.cursor() as cur:
         cur.execute("SELECT duid, as_of, risk_level, payload->'constraint_risk'->>'risk_level' FROM forecast_snapshot")
         assert cur.fetchone() == ("CATHROCK", nem("2026-10-18 04:00"), "high", "high")
+
+
+@needs_db
+def test_store_accepts_the_password_separately_from_the_url() -> None:
+    # On Azure the password is an Entra token passed apart from the URL; mimic that locally.
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(TEST_DATABASE_URL)
+    password = parts.password
+    bare = urlunsplit(parts._replace(netloc=f"{parts.username}@{parts.hostname}:{parts.port}"))
+    store = ops_ingest.Store(bare, password=password)
+    try:
+        with store.conn.cursor() as cur:
+            cur.execute("SELECT current_user")
+            assert cur.fetchone()[0] == parts.username
+    finally:
+        store.close()

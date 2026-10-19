@@ -1,0 +1,5 @@
+# Function app dependencies. The deploy workflow installs them into .python_packages
+# (pip --target) on a Linux runner with Python 3.13, the app's runtime version.
+azure-functions==2.3.0
+azure-identity==1.26.0
+-r ../requirements-ingest.txt
