@@ -98,9 +98,9 @@ jobs:
       - name: Migrate, grant the app and ingest roles, seed
         working-directory: console
         env:
-          SEED_ADMIN_EMAIL: ${{ vars.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
           SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
-          SEED_VIEWER_EMAIL: ${{ vars.SEED_VIEWER_EMAIL }}
+          SEED_VIEWER_EMAIL: ${{ secrets.SEED_VIEWER_EMAIL }}
           SEED_VIEWER_PASSWORD: ${{ secrets.SEED_VIEWER_PASSWORD }}
           APP_PRINCIPAL_ID: ${{ vars.AZURE_WEBAPP_PRINCIPAL_ID }}
           FUNC: ${{ vars.AZURE_FUNCTION_NAME }}

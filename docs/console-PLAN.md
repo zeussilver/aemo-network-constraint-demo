@@ -855,11 +855,23 @@ If the free grant does apply, execution cost is $0. The spending limit stays On.
   - `deploy.sh`: registers `Microsoft.Storage`, which was not registered before, and sets
     `AZURE_FUNCTION_NAME` and `AZURE_FUNCTION_PRINCIPAL_ID`.
 - **Checks:**
-  - pytest 125 passed (+8: 5 function-job, 1 password-separate `Store`, and the 2 existing
-    telemetry tests now counted in the total).
+  - pytest 125 passed (+6 over main's 119: 5 function-job tests, 1 password-separate
+    `Store` test).
   - Every pinned dependency has a manylinux cp313 wheel (27 wheels, 81 MB).
   - `az bicep build`: 0 warnings.
   - What-if: 10 creates (storage account, blob service, container, 3 role assignments, Flex
     plan, function app, 2 basic-auth policies). The 4 "Modify" entries are what-if noise:
     unresolved principal reference, server-side read-only Postgres properties, App
     Insights flow fields, web app siteConfig the GET omits.
+- **Function resources created:** the user re-ran `infra/deploy.sh`, and deployment
+  `siteops-20261020011558` succeeded in 4 min 50 s (the first attempt stopped at the
+  prompt without changes).
+  - `func-siteops-coxh2t`: Python 3.13, 2048 MB, max 1 instance.
+  - `stsiteopscoxh2t`: shared key off, TLS 1.2, no public blob.
+  - Storage roles present: Blob Data Owner, Queue Data Contributor, Table Data Contributor.
+  - Alert receiver `…@outlook.com` correct.
+- **Privacy fix before merging:** the user chose personal addresses as console sign-in
+  emails. `deploy.sh` stored them as Actions *variables*, which public-repo logs print in
+  clear. `deploy.yml` now reads `secrets.SEED_ADMIN_EMAIL` / `secrets.SEED_VIEWER_EMAIL`
+  (masked) and `deploy.sh` sets them as secrets. No deploy had run with the personal
+  addresses, so nothing was exposed.

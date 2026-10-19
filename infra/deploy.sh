@@ -99,8 +99,10 @@ gh variable set AZURE_APPINSIGHTS_NAME --body "$(out appInsightsName)"
 gh variable set AZURE_FUNCTION_NAME --body "$(out functionAppName)"
 gh variable set AZURE_FUNCTION_PRINCIPAL_ID --body "$(out functionPrincipalId)"
 
+# Sign-in emails are secrets, not variables: this repository is public, and Actions logs
+# print variable values in clear but mask secrets.
 read -rp "Console admin sign-in email [admin@example.com]: " admin_email
-gh variable set SEED_ADMIN_EMAIL --body "${admin_email:-admin@example.com}"
+printf '%s' "${admin_email:-admin@example.com}" | gh secret set SEED_ADMIN_EMAIL
 read -rsp "Console admin password (12+ characters, not shown): " admin_password; echo
 [ "${#admin_password}" -ge 12 ] || { echo "The password must be at least 12 characters."; exit 1; }
 printf '%s' "$admin_password" | gh secret set SEED_ADMIN_PASSWORD
@@ -109,7 +111,7 @@ unset admin_password
 read -rp "Also create a read-only viewer account for reviewers? [y/N]: " want_viewer
 if [ "$want_viewer" = "y" ] || [ "$want_viewer" = "Y" ]; then
   read -rp "Viewer sign-in email [viewer@example.com]: " viewer_email
-  gh variable set SEED_VIEWER_EMAIL --body "${viewer_email:-viewer@example.com}"
+  printf '%s' "${viewer_email:-viewer@example.com}" | gh secret set SEED_VIEWER_EMAIL
   read -rsp "Viewer password (12+ characters, not shown): " viewer_password; echo
   [ "${#viewer_password}" -ge 12 ] || { echo "The password must be at least 12 characters."; exit 1; }
   printf '%s' "$viewer_password" | gh secret set SEED_VIEWER_PASSWORD
@@ -118,4 +120,4 @@ fi
 
 echo
 echo "Done. Web app: $(out webAppUrl)"
-echo "Push to ops-console (or main) to run .github/workflows/deploy.yml."
+echo "Merge to main to run .github/workflows/deploy.yml."
