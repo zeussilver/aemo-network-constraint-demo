@@ -54,7 +54,7 @@ jobs:
       - name: Allow this runner through the database firewall
         run: |
           ip="$(curl -fsS https://api.ipify.org)"
-          az postgres flexible-server firewall-rule create -g "$RG" -n "$PG_SERVER" --rule-name "$RULE" \
+          az postgres flexible-server firewall-rule create -g "$RG" --server-name "$PG_SERVER" --name "$RULE" \
             --start-ip-address "$ip" --end-ip-address "$ip" --output none
       - name: Run ops_ingest
         env:
@@ -70,4 +70,4 @@ jobs:
             --database-url "postgresql://${PG_USER}@${PG_HOST}:5432/ops_console?sslmode=require"
       - name: Remove the firewall rule
         if: always()
-        run: az postgres flexible-server firewall-rule delete -g "$RG" -n "$PG_SERVER" --rule-name "$RULE" --yes --output none || true
+        run: az postgres flexible-server firewall-rule delete -g "$RG" --server-name "$PG_SERVER" --name "$RULE" --yes --output none || true
