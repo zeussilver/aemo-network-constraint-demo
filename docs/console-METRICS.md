@@ -8,12 +8,13 @@ the row says so.
 
 | Suite | Count | Source |
 |---|---|---|
-| pytest (Python pipeline, incl. 4 Postgres integration tests) | 119 passed | CI run 39186569358 |
-| Vitest (unit + 15 Postgres integration tests) | 46 passed | CI run 39186569358 |
-| Playwright (against the standalone production build) | 8 passed | CI run 39186569358 |
-| Runtime dependency audit (`npm audit --omit=dev`) | 0 vulnerabilities | CI run 39186569358 |
+| pytest (Python pipeline, incl. 4 Postgres integration tests) | 125 passed | CI run 39287811049 |
+| Vitest (unit + 15 Postgres integration tests) | 46 passed | CI run 39287811049 |
+| Playwright (against the standalone production build) | 8 passed | CI run 39287811049 |
+| Runtime dependency audit (`npm audit --omit=dev`) | 0 vulnerabilities | CI run 39287811049 |
 
-The original forecasting pipeline had 97 pytest tests; the console work added 22.
+The original forecasting pipeline had 97 pytest tests. The console work added 22, and the
+Azure Functions ingest job added 6.
 
 ## Data (targets T2, T3)
 
@@ -29,8 +30,11 @@ The original forecasting pipeline had 97 pytest tests; the console work added 22
 | What | Value | Source |
 |---|---|---|
 | Workflow start to deployed and healthy | 6 min 26 s (build 48 s; migrate, app role, seed, deploy, smoke test 5 min 36 s) | deploy run 39186569586 |
+| Deploy including the ingest function | 8 min 44 s from push to the function registered (build 1 min 5 s; migrate, app roles, seed, web deploy, smoke test 4 min 32 s; function package and deploy 2 min 56 s) | deploy run 39287810990 |
+| Function package | 119.8 MB zip (code, model, Linux cp313 wheels) | deploy run 39287810990 |
 | Infrastructure | 17 Azure resources from Bicep (incl. 2 database admins and 1 role assignment), one `infra/deploy.sh` run | deployment `siteops-20261019121250` |
-| Stored Azure or database secrets | none (OIDC federation for CI, managed identity + Entra token for the app) | `infra/resources.bicep` |
+| Infrastructure for the ingest function | 10 more resources (storage account, blob service, container, Flex plan, function app, 3 storage role assignments, 2 basic-auth policies) | deployment `siteops-20261020011558` |
+| Stored Azure or database secrets | none (OIDC federation for CI; managed identity + Entra token for the app and the ingest function; the function's storage rejects shared keys) | `infra/resources.bicep`, `infra/ingest-function.bicep` |
 
 ## Latency (target T6)
 
@@ -52,6 +56,8 @@ include about 4 network round trips (mean TCP connect 51 ms).
 |---|---|---|
 | Alert drill | synthetic failed `ingest_run` at 03:28:58 UTC → alert fired 03:44:30 (first hourly evaluation) → auto-resolved 06:45:30 (two clean evaluations) → Resolved email received | Alerts Management API history; user confirmation |
 | Server-side request time (App Insights) | `/api/health` p50 5 / p95 13 ms; `/login` 11 / 19 ms; `/api/ready` 84 / 220 ms | `AppRequests`, 2026-10-19 |
+| Real stale-data alerts while GitHub's schedule was not firing (1 `schedule` run in about 19 slots) | fired 09:44:32 UTC → resolved 11:45:33; fired 12:44:30 → resolved 15:45:36 | Alerts Management API; the 09:44 Fired email confirmed by the user |
+| First Azure Functions timer run, 17:12 UTC 2026-10-19 | succeeded in 8.4 s, 0 exceptions; SCADA 7 files / 84 rows in 3.21 s; dispatch, intermittent and forecast had nothing new | `AppRequests`, `customEvents` (`ingest_run`), `AppExceptions` |
 
 ## Operations data the console surfaced (trading day 2026-10-17)
 
