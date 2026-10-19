@@ -46,6 +46,13 @@ include about 4 network round trips (mean TCP connect 51 ms).
 | Site page (signed in) | Azure | — | — | **not measured yet**: needs a console account; run `console/scripts/measure-latency.sh` |
 | Site page (signed in) | local standalone build | 23 ms | 25 ms | same script, local run |
 
+## Monitoring (target T8)
+
+| What | Value | Source |
+|---|---|---|
+| Alert drill | synthetic failed `ingest_run` at 03:28:58 UTC → alert fired 03:44:30 (first hourly evaluation) → auto-resolved 06:45:30 (two clean evaluations) → Resolved email received | Alerts Management API history; user confirmation |
+| Server-side request time (App Insights) | `/api/health` p50 5 / p95 13 ms; `/login` 11 / 19 ms; `/api/ready` 84 / 220 ms | `AppRequests`, 2026-10-19 |
+
 ## Operations data the console surfaced (trading day 2026-10-17)
 
 - Cathedral Rocks: estimated 181.4 MWh curtailed in 120 semi-dispatch-capped intervals.
