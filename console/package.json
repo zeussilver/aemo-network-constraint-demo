@@ -1,0 +1,53 @@
+{
+  "name": "ops-console",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.18 <23"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "node .next/standalone/server.js",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "e2e:prepare": "tsx e2e/prepare.ts",
+    "test:e2e": "npm run e2e:prepare && playwright test",
+    "postbuild": "cp -R .next/static .next/standalone/.next/"
+  },
+  "dependencies": {
+    "@azure/identity": "4.14.0",
+    "@azure/monitor-opentelemetry": "1.20.1",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "better-auth": "1.7.10",
+    "next": "16.4.2",
+    "pg": "8.23.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "recharts": "3.10.1",
+    "server-only": "0.0.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^22.20.5",
+    "@types/pg": "8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "18.0.8",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.2",
+    "prisma": "7.10.1",
+    "tailwindcss": "^4",
+    "tsx": "4.23.15",
+    "typescript": "^5",
+    "vitest": "5.0.5"
+  }
+}
