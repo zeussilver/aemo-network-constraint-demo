@@ -1,8 +1,8 @@
 name: Deploy
 
-# Build the console, migrate the Azure database, deploy to App Service, then load any new
-# NEMWeb data. Signs in to Azure with GitHub OIDC (no stored Azure secret) and to the
-# database with an Entra token (the database has no password login).
+# Build the console, migrate the Azure database, deploy the console to App Service and the
+# hourly NEMWeb ingest to Azure Functions. Signs in to Azure with GitHub OIDC (no stored
+# Azure secret) and to the database with an Entra token (the database has no password login).
 on:
   push:
     branches: [main]
@@ -10,6 +10,8 @@ on:
       - console/**
       - infra/**
       - src/**
+      - functions/**
+      - artifacts/cathrock_lead_time_models.joblib
       - data/site_registry.csv
       - requirements-ingest.txt
       - .github/workflows/deploy.yml
@@ -93,7 +95,7 @@ jobs:
           ip="$(curl -fsS https://api.ipify.org)"
           az postgres flexible-server firewall-rule create -g "$RG" --server-name "$PG_SERVER" --name "$RULE" \
             --start-ip-address "$ip" --end-ip-address "$ip" --output none
-      - name: Migrate, grant the app role, seed
+      - name: Migrate, grant the app and ingest roles, seed
         working-directory: console
         env:
           SEED_ADMIN_EMAIL: ${{ vars.SEED_ADMIN_EMAIL }}
@@ -101,16 +103,22 @@ jobs:
           SEED_VIEWER_EMAIL: ${{ vars.SEED_VIEWER_EMAIL }}
           SEED_VIEWER_PASSWORD: ${{ secrets.SEED_VIEWER_PASSWORD }}
           APP_PRINCIPAL_ID: ${{ vars.AZURE_WEBAPP_PRINCIPAL_ID }}
+          FUNC: ${{ vars.AZURE_FUNCTION_NAME }}
+          FUNC_PRINCIPAL_ID: ${{ vars.AZURE_FUNCTION_PRINCIPAL_ID }}
         run: |
           token="$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)"
           echo "::add-mask::$token"
           export DATABASE_URL="postgresql://${PG_USER}:${token}@${PG_HOST}:5432/ops_console?sslmode=require"
           npx prisma migrate deploy
           export PGPASSWORD="$token"
-          psql "host=$PG_HOST dbname=postgres user=$PG_USER sslmode=require" -v ON_ERROR_STOP=1 -q \
-            -v app_role="$WEBAPP" -v app_oid="$APP_PRINCIPAL_ID" -f ../infra/sql/app-role-create.sql
-          psql "host=$PG_HOST dbname=ops_console user=$PG_USER sslmode=require" -v ON_ERROR_STOP=1 -q \
-            -v app_role="$WEBAPP" -f ../infra/sql/app-role-grants.sql
+          # Both managed identities get a database role with data access only.
+          for pair in "$WEBAPP:$APP_PRINCIPAL_ID" "$FUNC:$FUNC_PRINCIPAL_ID"; do
+            role="${pair%%:*}"; oid="${pair#*:}"
+            psql "host=$PG_HOST dbname=postgres user=$PG_USER sslmode=require" -v ON_ERROR_STOP=1 -q \
+              -v app_role="$role" -v app_oid="$oid" -f ../infra/sql/app-role-create.sql
+            psql "host=$PG_HOST dbname=ops_console user=$PG_USER sslmode=require" -v ON_ERROR_STOP=1 -q \
+              -v app_role="$role" -f ../infra/sql/app-role-grants.sql
+          done
           npx prisma db seed
       - name: Remove the firewall rule
         if: always()
@@ -129,12 +137,49 @@ jobs:
           # Readiness reports data freshness; 503 is expected until the first ingest finishes.
           curl -sS --max-time 30 -o ready.json -w "ready: HTTP %{http_code}\n" "$url/api/ready"; cat ready.json; echo
 
-  ingest:
-    name: Load new NEMWeb data
+  deploy-function:
+    name: Deploy the ingest function
+    # After "deploy", so the function's database role exists before its first run.
     needs: deploy
-    uses: ./.github/workflows/ingest.yml
-    with:
-      trigger: backfill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
     permissions:
       contents: read
       id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"   # the function app's runtime version
+      - name: Package the function (code, model bundle, Linux wheels)
+        run: |
+          mkdir -p build/src build/artifacts
+          cp functions/function_app.py functions/ingest_job.py functions/host.json build/
+          cp src/__init__.py build/src/
+          cp -R src/aemo_constraint_demo build/src/
+          find build/src -name __pycache__ -prune -exec rm -rf {} +
+          cp artifacts/cathrock_lead_time_models.joblib build/artifacts/
+          pip install --quiet --only-binary=:all: -r functions/requirements.txt \
+            --target build/.python_packages/lib/site-packages
+          cd build && zip -qr "$GITHUB_WORKSPACE/ingest-function.zip" . && cd ..
+          ls -l ingest-function.zip
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy to Azure Functions
+        run: |
+          az functionapp deployment source config-zip -g "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            -n "${{ vars.AZURE_FUNCTION_NAME }}" --src ingest-function.zip --build-remote false --timeout 900
+      - name: Confirm the timer function is registered
+        run: |
+          # The host syncs triggers shortly after a deploy; allow up to 2 minutes.
+          for attempt in $(seq 1 12); do
+            names="$(az functionapp function list -g "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              -n "${{ vars.AZURE_FUNCTION_NAME }}" --query "[].name" -o tsv)"
+            if echo "$names" | grep -q nemweb_ingest; then echo "registered: $names"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::nemweb_ingest is not registered on ${{ vars.AZURE_FUNCTION_NAME }}"; exit 1

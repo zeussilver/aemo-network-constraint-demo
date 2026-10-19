@@ -75,7 +75,7 @@ read -rp "Create or update these Azure resources now? Type yes to continue: " an
 
 echo "Registering resource providers (one-time, free)..."
 for provider in Microsoft.Web Microsoft.DBforPostgreSQL Microsoft.Insights Microsoft.OperationalInsights \
-  Microsoft.ManagedIdentity Microsoft.AlertsManagement; do
+  Microsoft.ManagedIdentity Microsoft.AlertsManagement Microsoft.Storage; do
   az provider register -n "$provider" --wait --output none
 done
 
@@ -96,6 +96,8 @@ gh variable set AZURE_PG_SERVER --body "$(out postgresServerName)"
 gh variable set AZURE_PG_HOST --body "$(out postgresHost)"
 gh variable set AZURE_DEPLOY_IDENTITY_NAME --body "$(out deployIdentityName)"
 gh variable set AZURE_APPINSIGHTS_NAME --body "$(out appInsightsName)"
+gh variable set AZURE_FUNCTION_NAME --body "$(out functionAppName)"
+gh variable set AZURE_FUNCTION_PRINCIPAL_ID --body "$(out functionPrincipalId)"
 
 read -rp "Console admin sign-in email [admin@example.com]: " admin_email
 gh variable set SEED_ADMIN_EMAIL --body "${admin_email:-admin@example.com}"

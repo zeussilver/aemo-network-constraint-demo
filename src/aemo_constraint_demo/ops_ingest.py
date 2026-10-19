@@ -266,10 +266,12 @@ UPSERTS = {
 class Store:
     """Thin psycopg wrapper. One connection; each file is committed on its own."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, password: str | None = None) -> None:
         import psycopg  # imported here so parser tests do not need a database driver
 
-        self.conn = psycopg.connect(database_url, autocommit=False)
+        # ``password`` carries an Entra access token on Azure; locally it stays in the URL.
+        extra = {"password": password} if password else {}
+        self.conn = psycopg.connect(database_url, autocommit=False, **extra)
 
     def close(self) -> None:
         self.conn.close()
@@ -633,8 +635,10 @@ def send_custom_event(connection_string: str, name: str, event: dict) -> None:
     response.raise_for_status()
 
 
-def run(database_url: str, sources: Sequence[str], config: IngestConfig) -> list[SourceResult]:
-    store = Store(database_url)
+def run(
+    database_url: str, sources: Sequence[str], config: IngestConfig, password: str | None = None
+) -> list[SourceResult]:
+    store = Store(database_url, password=password)
     try:
         duids = store.registry_duids()
         if not duids:
