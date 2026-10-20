@@ -47,7 +47,12 @@ include about 4 network round trips (mean TCP connect 51 ms).
 | `/login` | Azure | 221 ms | 270 ms | same |
 | `/api/ready` (DB queries) | Azure | 319 ms | 491 ms | same |
 | `/api/health`, first request after ~25 min idle | Azure | 524 ms (single request) | — | console-PLAN.md, cold-start entry; the next request took 210 ms |
-| Site page (signed in) | Azure | — | — | **not measured yet**: needs a console account; run `console/scripts/measure-latency.sh` |
+| Site page (signed in), time to first byte | Azure | 291 ms | 367 ms | `console/scripts/measure-latency.sh`, 2026-10-20 02:25 UTC, 50 requests per page |
+| Site page (signed in), server time + 1 round trip | Azure | 121 ms | 168 ms | same run. **T6 met** (target: p95 server time ≤ 800 ms) |
+| Overview `/` (signed in), time to first byte | Azure | 355 ms | 425 ms | same run |
+| Overview `/` (signed in), server time + 1 round trip | Azure | 162 ms | 249 ms | same run |
+| `/status` (signed in), time to first byte | Azure | 296 ms | 376 ms | same run |
+| `/status` (signed in), server time + 1 round trip | Azure | 122 ms | 165 ms | same run |
 | Site page (signed in) | local standalone build | 23 ms | 25 ms | same script, local run |
 
 ## Monitoring (target T8)
