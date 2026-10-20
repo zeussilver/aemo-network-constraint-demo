@@ -73,6 +73,7 @@ flowchart LR
 | Push to deployed and healthy | 6 min 26 s (build 48 s, migrate + deploy + smoke test 5 min 36 s) |
 | SCADA vs dispatch `INITIALMW` cross-check | median absolute difference 0.0 MW over 100,224 intervals |
 | Public endpoints from Melbourne, warm | `/api/health` p95 282 ms, `/api/ready` p95 491 ms |
+| Signed-in site page from Melbourne, warm | p95 367 ms to first byte; server time + one round trip p95 168 ms |
 | Hourly ingest on Azure Functions, first 9 runs | all succeeded; median 10.3 s; 39.7 s for the run that also loads the daily files |
 
 **Security choices**:
