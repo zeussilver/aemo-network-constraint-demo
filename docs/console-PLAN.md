@@ -275,7 +275,7 @@ The README and `docs/console-METRICS.md` report actual values even when a target
 | Log Analytics / App Insights | Free under 5 GB/month (this app will be far below) |
 | Log search alert rule (1) | Small monthly charge. Microsoft's USD page did not show the figure; third-party sources quote roughly US$0.50–1.50/month at 15-min frequency. Confirmed in the Azure pricing calculator and shown to you before creation; paid from the student credit |
 | Standard availability test (optional) | Per execution. Third-party rate US$0.0005 → 1 location every 15 min ≈ US$1.44/month. Confirmed before creation |
-| Azure Functions Flex Consumption (added 2026-10-19) | US$2/month or less for the hourly ingest, assuming the free grant does not apply (estimate in the progress log) |
+| Azure Functions Flex Consumption (added 2026-10-19) | About US$1/month for the hourly ingest from measured run times, assuming the free grant does not apply (progress log, 2026-10-20) |
 | GitHub Actions | Free (public repo) |
 
 After the demo period, you choose: keep or delete. Delete = one command,
@@ -901,3 +901,23 @@ If the free grant does apply, execution cost is $0. The spending limit stays On.
   - fired 12:44:30 → resolved 15:45:36, after the 14:35 scheduled run.
 
   No alert is open.
+
+### 2026-10-20 — first nine hourly runs, cost from measured times
+- Runs from 17:12 to 01:12 UTC: 9 of 9 succeeded, 0 exceptions, no new alert.
+- The 8 SCADA-only runs: median 10.3 s (range 8.4–12.7 s), 7–12 new SCADA files each.
+- The 19:12 run also loaded the daily files and took 39.7 s:
+  - SCADA 13 files;
+  - dispatch 1 file, 3,456 rows (2.8 s);
+  - intermittent 1 file, 40.3 MB, 9,477 rows (9.7 s);
+  - 1 forecast snapshot (19.1 s).
+- The 10-19 estimate assumed 20 s per SCADA-only run and about 120 s more for the daily run.
+  Measured: 10.3 s and about 30 s more.
+- Cost recalculated for a 30-day month at 2 GB per instance:
+  - 690 SCADA-only runs × 10.3 s × 2 GB ≈ 14,270 GB-s;
+  - 30 daily runs × 39.7 s × 2 GB ≈ 2,385 GB-s;
+  - total ≈ 16,655 GB-s × $0.000039 ≈ US$0.65;
+  - executions: 720 × $0.40 per million ≈ US$0.0003;
+  - storage and operations: under US$0.50, as before.
+
+  About US$1/month without the free grant, US$0 of execution time with it. Cost Management
+  will show the real figure after a day or two.

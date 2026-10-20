@@ -59,6 +59,15 @@ include about 4 network round trips (mean TCP connect 51 ms).
 | Real stale-data alerts while GitHub's schedule was not firing (1 `schedule` run in about 19 slots) | fired 09:44:32 UTC → resolved 11:45:33; fired 12:44:30 → resolved 15:45:36 | Alerts Management API; the 09:44 Fired email confirmed by the user |
 | First Azure Functions timer run, 17:12 UTC 2026-10-19 | succeeded in 8.4 s, 0 exceptions; SCADA 7 files / 84 rows in 3.21 s; dispatch, intermittent and forecast had nothing new | `AppRequests`, `customEvents` (`ingest_run`), `AppExceptions` |
 
+## Hourly ingest on Azure Functions
+
+| What | Value | Source |
+|---|---|---|
+| Timer runs, 2026-10-19 17:12 to 2026-10-20 01:12 UTC | 9 of 9 succeeded, 0 exceptions | `AppRequests`, `AppExceptions` |
+| SCADA-only runs (8) | median 10.3 s (8.4–12.7 s), 7–12 new SCADA files each | `AppRequests`, `customEvents` (`ingest_run`) |
+| Run that also loads the daily files (19:12 UTC) | 39.7 s: SCADA 13 files; dispatch 1 file, 3,456 rows; intermittent 1 file (40.3 MB), 9,477 rows; 1 forecast snapshot (19.1 s) | `customEvents` (`ingest_run`) |
+| Estimated cost (not a bill) | ≈ 16,655 GB-s a month → ≈ US$0.65 execution time, plus under US$0.50 storage and operations: about US$1/month, assuming no free grant | console-PLAN.md, 2026-10-20 entry |
+
 ## Operations data the console surfaced (trading day 2026-10-17)
 
 - Cathedral Rocks: estimated 181.4 MWh curtailed in 120 semi-dispatch-capped intervals.
