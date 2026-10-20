@@ -23,21 +23,24 @@ read -rsp "Password (not shown): " password; echo
 body="$(python3 -c 'import json,sys; print(json.dumps({"email": sys.argv[1], "password": sys.argv[2]}))' "$email" "$password" )"
 unset password
 status="$(curl -s -c "$jar" -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -H "Origin: $BASE" \
-  --data-binary @- "$BASE/api/auth/sign-in/email" <<<"$body")"
+  --data-binary @- "$BASE/api/auth/sign-in/email" <<<"$body" || true)"
 unset body
 [ "$status" = "200" ] || { echo "Sign-in failed (HTTP $status)."; exit 1; }
 
-site="$(curl -s -b "$jar" "$BASE/sites?q=CATHROCK" | grep -o '/sites/c[a-z0-9]*' | head -1)"
+site="$(curl -s -b "$jar" "$BASE/sites?q=CATHROCK" | grep -o '/sites/c[a-z0-9]*' | head -1 || true)"
 [ -n "$site" ] || { echo "Could not find the CATHROCK site page."; exit 1; }
 
 # p50 / p95 of a column of milliseconds (portable: sort first, then index).
 percentiles() { sort -n | awk '{ v[NR] = $1 } END { printf "%8.0f ms %8.0f ms", v[int(NR * 0.5)], v[int(NR * 0.95)] }'; }
 
+# curl -s is silent on network errors, and set -e would then exit without a word.
+failed() { echo "A request to $page failed (curl exit $1). Run the script again." >&2; exit 1; }
+
 printf "%-22s %4s %22s %26s\n" page n "TTFB p50 / p95" "server+RTT p50 / p95"
 for page in "$site" "/" "/status"; do
-  for _ in 1 2 3 4 5; do curl -s -b "$jar" -o /dev/null "$BASE$page"; done
+  for _ in 1 2 3 4 5; do curl -s -b "$jar" -o /dev/null "$BASE$page" || failed $?; done
   for _ in $(seq 1 "$N"); do
-    curl -s -b "$jar" -o /dev/null -w "%{time_starttransfer} %{time_pretransfer} %{http_code}\n" "$BASE$page"
+    curl -s -b "$jar" -o /dev/null -w "%{time_starttransfer} %{time_pretransfer} %{http_code}\n" "$BASE$page" || failed $?
   done > "$workdir/times.txt"
   # A redirect to /login would be fast and meaningless: only count real page renders.
   if awk '$3 != 200 { bad = 1 } END { exit !bad }' "$workdir/times.txt"; then
