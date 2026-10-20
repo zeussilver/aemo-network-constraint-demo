@@ -921,3 +921,24 @@ If the free grant does apply, execution cost is $0. The spending limit stays On.
 
   About US$1/month without the free grant, US$0 of execution time with it. Cost Management
   will show the real figure after a day or two.
+
+### 2026-10-20 — T6 measured
+- The user ran `console/scripts/measure-latency.sh` against Azure, 50 timed requests per
+  page. The complete run, 02:25–02:27 UTC:
+
+  | Page (signed in) | TTFB p50 / p95 | server + RTT p50 / p95 | App Insights server p50 / p95 |
+  |---|---|---|---|
+  | Site page (CATHROCK) | 291 / 367 ms | 121 / 168 ms | 67 / 100 ms |
+  | Overview `/` | 355 / 425 ms | 162 / 249 ms | 113 / 153 ms |
+  | `/status` | 296 / 376 ms | 122 / 165 ms | 68 / 93 ms |
+
+  App Insights logged 23–28 of each page's 55 requests (incl. warm-up).
+- **T6 met**: site page p95 server time ≤ 800 ms. The measured 168 ms still includes one
+  network round trip.
+- An earlier run at 02:16 UTC agreed for the two pages it finished: site page 294 / 359 ms
+  TTFB and 122 / 162 ms server + RTT; overview 339 / 432 and 161 / 234 ms. It then stopped
+  partway through `/status`, printing nothing. Every `/status` request the server logged
+  returned 200, so a request most likely failed on the client side: `curl -s` hides the
+  error and `set -e` exits. The script now names the page and the curl exit code when a
+  request fails. Two earlier steps had the same silent exit and now print their messages:
+  a sign-in request that cannot connect, and a missing site link.
