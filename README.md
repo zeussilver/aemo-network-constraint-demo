@@ -73,7 +73,7 @@ flowchart LR
 | Push to deployed and healthy | 6 min 26 s (build 48 s, migrate + deploy + smoke test 5 min 36 s) |
 | SCADA vs dispatch `INITIALMW` cross-check | median absolute difference 0.0 MW over 100,224 intervals |
 | Public endpoints from Melbourne, warm | `/api/health` p95 282 ms, `/api/ready` p95 491 ms |
-| First hourly ingest run on Azure Functions | 8.4 s; 7 new SCADA files (84 rows), no errors |
+| Hourly ingest on Azure Functions, first 9 runs | all succeeded; median 10.3 s; 39.7 s for the run that also loads the daily files |
 
 **Security choices**:
 - The database has **no password login**. The web app and the ingest function sign in
@@ -87,8 +87,8 @@ flowchart LR
 five regions, none of them in Australia, and this is the closest. The web app and database run
 on free tiers: App Service F1, PostgreSQL B1MS under the 12-month free offer, Log Analytics
 with a 0.1 GB/day cap. Two items are paid: the log alert rule (US$0.50/month) and the
-ingest function on Flex Consumption (estimated at US$2/month or less, assuming its free
-grant does not cover this subscription).
+ingest function on Flex Consumption (about US$1/month from the measured run times,
+assuming its free grant does not cover this subscription).
 
 Run it locally: [console/README.md](console/README.md). Deploy it: `infra/deploy.sh`, then
 push.
@@ -167,7 +167,7 @@ This demo implements a minimum viable version:
 - **Open-Meteo historical weather API**: `https://open-meteo.com/en/docs/historical-weather-api`
 - **Open-Meteo forecast API**: `https://open-meteo.com/en/docs`
 
-Open-Meteo is used only for a demo weather signal. A production version should use whichever weather/NWP feed Proa prefers.
+Open-Meteo is used only for a demo weather signal. A production version should use whichever weather/NWP feed the site operator prefers.
 
 ---
 
