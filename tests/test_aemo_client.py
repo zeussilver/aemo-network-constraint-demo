@@ -40,7 +40,8 @@ def _write_zip(path: Path, members: dict[str, bytes | str]) -> Path:
 def test_monthly_archive_urls_encode_aemo_filename() -> None:
     url = aemo_client.monthly_archive_url("dudetail", 2026, 5)
     assert "MMSDM_2026_05" in url
-    assert "PUBLIC_ARCHIVE%2523DUDETAIL%2523FILE01%2523202605010000.zip" in url
+    assert url.endswith("/PUBLIC_ARCHIVE%23DUDETAIL%23FILE01%23202605010000.zip")
+    assert "%2523" not in url
 
     legacy = aemo_client.legacy_monthly_archive_url("DUDETAIL", 2026, 5)
     assert legacy.endswith("/PUBLIC_DVD_DUDETAIL_202605010000.zip")
@@ -222,6 +223,15 @@ def test_find_cached_monthly_table_picks_latest_and_exact_table(tmp_path: Path) 
     assert found is not None
     assert found.name == "PUBLIC_ARCHIVE%23GENCONSET%23FILE01%23202604010000.zip"
     assert aemo_client.find_cached_monthly_table("DUDETAIL", cache_dir=tmp_path) is None
+
+
+def test_find_cached_monthly_table_matches_download_file_names(tmp_path: Path) -> None:
+    url = aemo_client.monthly_archive_url("GENCONSET", 2026, 9)
+    saved = _write_zip(tmp_path / aemo_client._safe_filename_from_url(url), {"x.csv": "C"})
+    _write_zip(tmp_path / "PUBLIC_ARCHIVE_GENCONSETINVOKE_FILE01_202610010000.zip", {"x.csv": "C"})
+
+    assert saved.name == "PUBLIC_ARCHIVE_GENCONSET_FILE01_202609010000.zip"
+    assert aemo_client.find_cached_monthly_table("GENCONSET", cache_dir=tmp_path) == saved
 
 
 def test_read_monthly_table_cached_first_skips_the_network(tmp_path: Path, monkeypatch) -> None:

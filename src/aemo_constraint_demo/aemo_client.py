@@ -107,13 +107,12 @@ def latest_mms_month() -> tuple[int, int]:
 def monthly_archive_url(table: str, year: int, month: int, file_no: int = 1) -> str:
     """Build the post-2024 monthly MMSDM table ZIP URL.
 
-    NEMWeb lists # in filenames, but the archive endpoint currently requires
-    those characters to be double-encoded as %2523 rather than single-encoded
-    as %23.
+    AEMO filenames contain #, which NEMWeb links and serves as a single %23.
+    The double-encoded %2523 form an earlier version used now returns 404.
     """
     table = table.upper()
     filename = f"PUBLIC_ARCHIVE#{table}#FILE{file_no:02d}#{year}{month:02d}010000.zip"
-    encoded = quote(quote(filename, safe=""), safe="")
+    encoded = quote(filename, safe="")
     return (
         f"{NEMWEB_BASE}/Data_Archive/Wholesale_Electricity/MMSDM/{year}/"
         f"MMSDM_{year}_{month:02d}/MMSDM_Historical_Data_SQLLoader/DATA/{encoded}"
@@ -280,9 +279,10 @@ def find_cached_monthly_table(table: str, cache_dir: str | Path = "data/cache") 
     table = str(table).upper()
     candidates: list[tuple[str, Path]] = []
     for path in cache_dir.glob("*.zip"):
-        # Cached archive names keep AEMO's "#" separators, sometimes still percent-encoded.
+        # Cached archive names keep AEMO's "#" separators (sometimes still percent-encoded),
+        # or "_" when download_file saved them.
         name = unquote(path.name).upper()
-        match = re.search(rf"(?:ARCHIVE|DVD)\W*{table}\W.*?(\d{{12}})\.ZIP$", name)
+        match = re.search(rf"(?:ARCHIVE|DVD)[\W_]*{table}[\W_].*?(\d{{12}})\.ZIP$", name)
         if match:
             candidates.append((match.group(1), path))
     if not candidates:
