@@ -124,6 +124,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-train-months", type=int, default=3)
     parser.add_argument("--max-iter", type=int, default=200)
     parser.add_argument("--max-horizon-min", type=int, default=None)
+    parser.add_argument(
+        "--drop-features",
+        default="",
+        help="Comma-separated features to leave out, for ablations (e.g. the AEMO scenarios).",
+    )
     parser.add_argument("--out", default=None)
     parser.add_argument("--predictions-out", default=None, help="Optional CSV of scored test rows.")
     args = parser.parse_args(argv)
@@ -136,7 +141,12 @@ def main(argv: list[str] | None = None) -> int:
         dataset = dataset[dataset["horizon_min"] <= args.max_horizon_min]
     dataset = dataset.dropna(subset=["actual_rrp", "aemo_base", "last_rrp"]).reset_index(drop=True)
 
-    features = [column for column in feature_columns(dataset) if column in dataset.columns]
+    dropped = {name.strip() for name in args.drop_features.split(",") if name.strip()}
+    features = [
+        column
+        for column in feature_columns(dataset)
+        if column in dataset.columns and column not in dropped
+    ]
     folds = pmodel.monthly_folds(dataset, n_folds=args.folds, min_train_months=args.min_train_months)
     if not folds:
         raise SystemExit("Not enough months in the dataset to build a fold.")
@@ -153,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         "dataset": {
             "path": str(path),
             "rows": int(len(dataset)),
+            "dropped_features": sorted(dropped),
             "first_published": str(dataset["published"].min()),
             "last_target": str(dataset["target"].max()),
             "features": features,
