@@ -1,5 +1,6 @@
 import { formatNemTime } from "@/lib/format";
-import { Badge, type BadgeTone } from "./ui";
+import type { ForecastWindow } from "@/lib/ops-math";
+import { Badge, type BadgeTone, Notice } from "./ui";
 
 type Snapshot = {
   duid: string;
@@ -22,7 +23,7 @@ export function riskTone(level: string): BadgeTone {
 type CurvePoint = { lead_hours: number; window_start: string; probability: number; risk_level: string };
 
 /** Constraint-risk snapshot from the repo's model, shown with its own caveats. */
-export function RiskCard({ snapshot }: { snapshot: Snapshot | null }) {
+export function RiskCard({ snapshot, horizon }: { snapshot: Snapshot | null; horizon: ForecastWindow | null }) {
   if (!snapshot) {
     return (
       <p className="text-sm text-slate-600">
@@ -34,8 +35,14 @@ export function RiskCard({ snapshot }: { snapshot: Snapshot | null }) {
   const curve = payload.risk_curve ?? [];
   return (
     <div className="flex flex-col gap-3 text-sm">
+      {horizon?.ended && (
+        <Notice tone="amber">
+          Window ended {formatNemTime(horizon.endsAt)}. This is the latest scored forecast, not a live one: Next Day Dispatch publishes the
+          previous trading day once a day.
+        </Notice>
+      )}
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-semibold tabular-nums">{(snapshot.probability * 100).toFixed(0)}%</span>
+        <span className={`text-3xl font-semibold tabular-nums${horizon?.ended ? " text-slate-400" : ""}`}>{(snapshot.probability * 100).toFixed(0)}%</span>
         <Badge tone={riskTone(snapshot.riskLevel)}>{snapshot.riskLevel.replace("_", " ")} risk</Badge>
       </div>
       <p className="text-slate-700">

@@ -1,4 +1,4 @@
-import { assessFreshness, FRESHNESS_LIMITS_HOURS, originCategory, summariseCurtailment, tradingDayBounds, tradingDayOf, type Freshness, type OriginCategory, type SourceName } from "../ops-math";
+import { assessFreshness, forecastWindow, FRESHNESS_LIMITS_HOURS, originCategory, summariseCurtailment, tradingDayBounds, tradingDayOf, type Freshness, type OriginCategory, type SourceName } from "../ops-math";
 import { assertCan } from "./audit";
 import { NotFoundError, type Actor, type Db } from "./types";
 
@@ -75,8 +75,8 @@ export async function getFleetOverview(db: Db, actor: Actor, now = new Date()) {
           _count: { _all: true },
         })
       : Promise.resolve([]),
-    db.$queryRaw<Array<{ duid: string; as_of: Date; probability: number; risk_level: string }>>`
-      SELECT DISTINCT ON (duid) duid, as_of, probability, risk_level FROM forecast_snapshot
+    db.$queryRaw<Array<{ duid: string; as_of: Date; horizon_hours: number; probability: number; risk_level: string }>>`
+      SELECT DISTINCT ON (duid) duid, as_of, horizon_hours, probability, risk_level FROM forecast_snapshot
       WHERE duid = ANY(${duids}) ORDER BY duid, as_of DESC`,
     getFreshness(db, now),
   ]);
@@ -107,7 +107,7 @@ export async function getFleetOverview(db: Db, actor: Actor, now = new Date()) {
         latestAt: latest.length ? new Date(Math.min(...latest.map((row) => row.settlement_date.getTime()))) : null,
         curtailment: summariseCurtailment(dispatch.filter((row) => siteDuids.includes(row.duid))),
         selfForecastShare: usedTotal ? usedSelf / usedTotal : null,
-        snapshot,
+        snapshot: snapshot ? { ...snapshot, window: forecastWindow(snapshot.as_of, snapshot.horizon_hours, now) } : null,
       };
     }),
   };
@@ -123,7 +123,7 @@ export type IntervalPoint = {
 };
 
 /** One trading day of operations for a site: series, curtailment, forecast origins, risk. */
-export async function getSiteOps(db: Db, actor: Actor, siteId: string, requestedDay?: string) {
+export async function getSiteOps(db: Db, actor: Actor, siteId: string, requestedDay?: string, now = new Date()) {
   assertCan(actor, "ops:read");
   const site = await db.site.findUnique({ where: { id: siteId }, include: { units: { select: { duid: true } } } });
   if (!site) throw new NotFoundError("Site", siteId);
@@ -142,7 +142,8 @@ export async function getSiteOps(db: Db, actor: Actor, siteId: string, requested
       WHERE duid = ANY(${duids}) ORDER BY duid, settlement_date DESC`,
     db.forecastSnapshot.findFirst({ where: { duid: { in: duids } }, orderBy: { asOf: "desc" } }),
   ]);
-  if (!day) return { day: null, days, duids, latestScada, snapshot, points: [], curtailment: null, origins: [], suppression: [] };
+  const snapshotWindow = snapshot ? forecastWindow(snapshot.asOf, snapshot.horizonHours, now) : null;
+  if (!day) return { day: null, days, duids, latestScada, snapshot, snapshotWindow, points: [], curtailment: null, origins: [], suppression: [] };
 
   const { after, until } = tradingDayBounds(day);
   const window = { duid: { in: duids }, settlementDate: { gt: after, lte: until } };
@@ -192,6 +193,7 @@ export async function getSiteOps(db: Db, actor: Actor, siteId: string, requested
     duids,
     latestScada,
     snapshot,
+    snapshotWindow,
     points: [...points.values()].sort((a, b) => a.t.localeCompare(b.t)),
     curtailment: summariseCurtailment(dispatch),
     origins,

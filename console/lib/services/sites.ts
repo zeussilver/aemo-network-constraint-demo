@@ -101,6 +101,13 @@ export async function updateSite(db: Db, actor: Actor, id: string, version: numb
         `Unit ${mismatch.duid} is registered in ${mismatch.registry.region}; a site holding it cannot move to ${input.region}.`,
       );
     }
+    // Same rule as assignUnit: a site's fuel must match every unit it holds.
+    const fuelMismatch = units.find((unit) => unit.registry.fuel !== input.fuel);
+    if (fuelMismatch) {
+      throw new RuleError(
+        `Unit ${fuelMismatch.duid} is a ${fuelMismatch.registry.fuel.toLowerCase()} unit; a site holding it cannot change to ${input.fuel.toLowerCase()}.`,
+      );
+    }
     const { count } = await tx.site.updateMany({ where: { id, version }, data: { ...input, version: { increment: 1 } } });
     if (count === 0) throw new ConflictError(STALE);
     const after = await tx.site.findUniqueOrThrow({ where: { id } });
