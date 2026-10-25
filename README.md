@@ -4,7 +4,8 @@ A staff console for looking after solar and wind farm customers in Australia's N
 Electricity Market: manage customers, sites and their AEMO units, and watch each site's
 operations on AEMO's public NEMWeb data. It is deployed on Azure:
 **https://siteops-console-coxh2t.azurewebsites.net** (staff sign-in; accounts are created by
-an administrator).
+an administrator). The app runs on App Service's free F1 tier, which sleeps when idle: the
+first request can take up to about a minute.
 
 A staff member's path through it:
 
