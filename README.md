@@ -120,11 +120,11 @@ extensions.
 
 ---
 
-## Why this maps to the internship brief
+## How the forecasting service works
 
-The internship brief asks for a service that can be queried for a `DUID` and return planned AEMO constraints plus ML-forecast constraints.
+The forecasting service can be queried for a `DUID` and returns planned AEMO constraints plus ML-forecast constraints.
 
-This demo implements a minimum viable version:
+It is a minimum viable version in five parts:
 
 1. **AEMO public data ingestion**
    - Downloads AEMO standing-data tables from MMSDM monthly archives.
@@ -846,7 +846,7 @@ The notebook walks through:
 
 ### Why Next Day Dispatch files?
 
-Full MMSDM monthly dispatch tables can be hundreds of MB per table. For an internship demo, recent Next Day Dispatch files are a cleaner choice: they are small daily ZIPs and still include 5-minute unit dispatch plus constraint solutions for the previous trading day.
+Full MMSDM monthly dispatch tables can be hundreds of MB per table. For a demo of this size, recent Next Day Dispatch files are a cleaner choice: they are small daily ZIPs and still include 5-minute unit dispatch plus constraint solutions for the previous trading day.
 
 ### Why logistic regression?
 
