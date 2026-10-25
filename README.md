@@ -215,10 +215,11 @@ This is intentionally simple and auditable. The real production version should r
 ├── data/
 │   ├── console_duids.txt        # the console's 12 DUIDs
 │   └── site_registry.csv        # AEMO registry rows for them (scripts/build_site_registry.py)
-├── application/
-│   ├── interview_talking_points.md
-│   ├── project_summary.md
-│   └── resume_bullets.md
+├── docs/
+│   ├── console-PLAN.md          # console plan, acceptance targets and progress log
+│   ├── console-METRICS.md       # measured numbers behind the README table
+│   ├── images/                  # README screenshots
+│   └── reports/                 # Phase 3 and Phase 6 run reports
 ├── notebooks/
 │   └── aemo_constraint_forecast_demo.ipynb
 ├── scripts/
@@ -484,7 +485,7 @@ python scripts/benchmark_models.py \
   --model-types logistic_regression random_forest hist_gradient_boosting \
   --out artifacts/performance_benchmark.csv \
   --best-model-out artifacts/cathrock_6h_best_model.joblib \
-  --report-out chatref/phase3_performance_report.md
+  --report-out docs/reports/phase3_performance_report.md
 ```
 
 Observed best setting:
@@ -512,7 +513,7 @@ artifacts/performance_benchmark.csv
 artifacts/cathrock_6h_best_model.joblib
 artifacts/cathrock_6h_best_model_metrics.json
 artifacts/cathrock_6h_feature_importance.csv
-chatref/phase3_performance_report.md
+docs/reports/phase3_performance_report.md
 ```
 
 ### Phase 5: Forecast-time feature parity
@@ -575,7 +576,7 @@ python scripts/train_lead_time_models.py \
   --model-out artifacts/cathrock_lead_time_models.joblib \
   --metrics-out artifacts/cathrock_lead_time_metrics.json \
   --folds-out artifacts/cathrock_lead_time_folds.csv \
-  --report-out chatref/phase6_lead_time_report.md
+  --report-out docs/reports/phase6_lead_time_report.md
 ```
 
 Query it the same way as any other bundle; the response gains `risk_curve` and `peak_lead`:
@@ -631,7 +632,7 @@ Phase 6 artifacts:
 artifacts/cathrock_lead_time_models.joblib
 artifacts/cathrock_lead_time_metrics.json
 artifacts/cathrock_lead_time_folds.csv
-chatref/phase6_lead_time_report.md
+docs/reports/phase6_lead_time_report.md
 ```
 
 ### 3. Run tests

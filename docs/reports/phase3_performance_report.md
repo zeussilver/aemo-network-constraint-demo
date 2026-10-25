@@ -25,7 +25,7 @@ the Phase 2.5 event-window reference, but the result remains sparse-fold evidenc
 - `artifacts/cathrock_6h_best_model.joblib`
 - `artifacts/cathrock_6h_best_model_metrics.json`
 - `artifacts/cathrock_6h_feature_importance.csv`
-- `chatref/phase3_performance_report.md`
+- `docs/reports/phase3_performance_report.md`
 
 ## Commands Run
 
@@ -46,7 +46,7 @@ python scripts/benchmark_models.py \
   --model-types logistic_regression random_forest hist_gradient_boosting \
   --out artifacts/performance_benchmark.csv \
   --best-model-out artifacts/cathrock_6h_best_model.joblib \
-  --report-out chatref/phase3_performance_report.md
+  --report-out docs/reports/phase3_performance_report.md
 ```
 
 ## Benchmark Command
@@ -60,7 +60,7 @@ python scripts/benchmark_models.py \
   --model-types logistic_regression random_forest hist_gradient_boosting \
   --out artifacts/performance_benchmark.csv \
   --best-model-out artifacts/cathrock_6h_best_model.joblib \
-  --report-out chatref/phase3_performance_report.md
+  --report-out docs/reports/phase3_performance_report.md
 ```
 
 ## Evaluated Settings
