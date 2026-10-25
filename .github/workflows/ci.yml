@@ -101,7 +101,11 @@ jobs:
           path: console/playwright-report
           retention-days: 7
       - name: Runtime dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        # npm audit exits non-zero whenever it finds anything; the script decides, failing on
+        # high or critical advisories except the documented exceptions it lists.
+        run: |
+          npm audit --omit=dev --json > "$RUNNER_TEMP/npm-audit.json" || true
+          node ../.github/scripts/audit-runtime.mjs "$RUNNER_TEMP/npm-audit.json"
 
   brand-guard:
     name: No third-party company names in the console
