@@ -79,8 +79,8 @@ export function OpsSection({ siteId, ops, capacityMw }: { siteId: string; ops: S
             <p className="text-sm text-slate-600">No dispatch data for this trading day yet.</p>
           )}
         </Card>
-        <Card title="Constraint risk (next hours)">
-          <RiskCard snapshot={ops.snapshot} />
+        <Card title="Constraint risk">
+          <RiskCard snapshot={ops.snapshot} horizon={ops.snapshotWindow} />
         </Card>
       </div>
 

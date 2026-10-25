@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessFreshness, originCategory, summariseCurtailment, tradingDayBounds, tradingDayOf } from "@/lib/ops-math";
+import { assessFreshness, forecastWindow, originCategory, summariseCurtailment, tradingDayBounds, tradingDayOf } from "@/lib/ops-math";
 
 const nem = (local: string) => new Date(`${local}+10:00`);
 
@@ -31,6 +31,18 @@ describe("summariseCurtailment", () => {
     expect(summary.curtailedMwh).toBeCloseTo(1, 10);
     expect(summary.clearedMwh).toBeCloseTo((30 + 50 + 20) / 12, 10);
     expect(summary.intervals).toBe(4);
+  });
+});
+
+describe("forecastWindow", () => {
+  it("ends horizonHours after the origin and is ended from that instant on", () => {
+    const asOf = nem("2026-10-18T04:00:00");
+    const before = forecastWindow(asOf, 6, nem("2026-10-18T09:55:00"));
+    expect(before.endsAt.toISOString()).toBe("2026-10-18T00:00:00.000Z"); // 10:00 NEM
+    expect(before.ended).toBe(false);
+    expect(forecastWindow(asOf, 6, nem("2026-10-18T10:00:00")).ended).toBe(true);
+    // As shown on Azure: Next Day Dispatch arrives a day late, so the window has long ended.
+    expect(forecastWindow(asOf, 6, nem("2026-10-19T02:12:00")).ended).toBe(true);
   });
 });
 
