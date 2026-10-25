@@ -92,8 +92,8 @@ points at `8.0.0-rc.23`, so the stable 7.x is pinned on purpose), `better-auth 1
 
 | Topic | Choice | Alternative and why not (yet) |
 |---|---|---|
-| Location | `console/` folder in this repo, sharing one Postgres with the Python pipeline | Separate repo: splits the flagship story |
-| Framework | Next.js 16 App Router, TypeScript strict, server components + server actions | — (the brief asks for React/Next.js) |
+| Location | `console/` folder in this repo, sharing one Postgres with the Python pipeline | Separate repo: splits one project across two repositories |
+| Framework | Next.js 16 App Router, TypeScript strict, server components + server actions | — |
 | Auth | **Better Auth** (email + password, `role` field), Prisma adapter | Auth.js v5: still `5.0.0-beta.32`, maintenance-only since the Better Auth team took it over in Sep 2025, and the docs point new projects to Better Auth. Entra ID sign-in is a stretch goal, only if the tenant allows an app registration |
 | ORM | Prisma 7.10.1 pinned, migrations own the schema | Drizzle: lighter, but Prisma is more widely used. Prisma 8 is still RC |
 | UI | Tailwind 4 + a few shadcn/ui components, Recharts | MUI: heavier |
@@ -102,7 +102,7 @@ points at `8.0.0-rc.23`, so the stable 7.x is pinned on purpose), `better-auth 1
 | DB access from Actions | Job adds its runner IP to the Postgres firewall, runs, then removes the rule (`if: always()`) | Open firewall to all IPs: simpler, weaker |
 | Deploy auth | GitHub OIDC → **user-assigned managed identity** with a federated credential, Contributor on the resource group only | Publish profile: needs SCM basic auth and a long-lived secret |
 | Infra | Bicep (`infra/main.bicep`) + `infra/deploy.sh`, which **the user runs** and which prompts for secrets | Portal clicks: not reproducible |
-| Hosting | App Service F1 Linux, Node 22 LTS (same as local), Next.js `output: "standalone"` | B1 (~paid) removes cold starts: optional upgrade for interview week, paid from student credit |
+| Hosting | App Service F1 Linux, Node 22 LTS (same as local), Next.js `output: "standalone"` | B1 (~paid) removes cold starts: optional upgrade, paid from student credit |
 | Delete semantics | Customers and sites are archived (`archivedAt`), units hard-deleted, every mutation audited | Hard delete everywhere: loses history |
 | Concurrency | `version` column, update fails on a stale version ("someone else edited this") | Last write wins |
 | Rendering (added in C0) | Cache Components **off** (create-next-app 16.4 turns it on) | On: every session read must sit in a `<Suspense>` boundary or the build fails, and an all-authenticated console has no static shell to gain |
@@ -160,7 +160,7 @@ forecast snapshot ≤ 30 h.
 
 Every check runs on the server (in each server action and page), not only in the UI.
 Seeded test users live in the local `.env` / seed script. On Azure, the user sets the
-admin password. A read-only viewer account for reviewers is optional (the user decides).
+admin password. A read-only viewer account is optional (the user decides).
 
 ### 3.4 Ingestion (`src/aemo_constraint_demo/ops_ingest.py`)
 - One hourly workflow, idempotent. Each source fetches only files newer than its last
@@ -238,11 +238,11 @@ Cut order if time runs short:
 - Vitest for the curtailment and freshness functions; CI build; deployed to App Service
   F1 by an az CLI script with App Insights and `/api/health`.
 
-Honest trade-off: B shows Next.js + Azure, but leaves the brief's core open (staff managing
+Honest trade-off: B shows Next.js + Azure, but leaves the console's core open (staff managing
 customers and sites with roles). Recommended only if time runs short.
 
 ### Calendar
-Deadline 2026-10-26; another commitment comes first until 10-21.
+Time box: done by 2026-10-25; another commitment comes first until 10-21.
 - Option A: build 10-22 → 10-24, screenshots and README 10-25.
 - Option B: 10-22, leaving 10-23 → 10-25 for the write-up.
 - **Before 10-22, about 15 minutes of user time**: sign up for Azure for Students and
@@ -304,8 +304,8 @@ After the demo period, you choose: keep or delete. Delete = one command,
 - **OpenTelemetry + Next.js bundling** can need `serverExternalPackages`. Fallback:
   App Service's built-in Node auto-instrumentation.
 - **F1 cold starts and quota**: first request after idle can take seconds, and a stopped
-  app returns 403 until the UTC midnight reset. Both stated in the README. B1 for
-  interview week is optional and paid.
+  app returns 403 until the UTC midnight reset. Both stated in the README. B1 is
+  optional and paid.
 - **Intermittent_DS size**: 40 MB zipped/day, unzipped size unknown until the first
   download. Mitigation: streaming reader, 7-day backfill only; cut first if slow.
 - **Curtailment is an estimate**: UIGF − cleared under a semi-dispatch cap mixes economic
@@ -329,10 +329,9 @@ After the demo period, you choose: keep or delete. Delete = one command,
    Options: (a) merge PR #1 first, then branch `ops-console` from `main` (cleaner; my
    recommendation), or (b) branch `ops-console` from the PR branch.
 2. Option A or B?
-3. A read-only viewer login for reviewers on the deployed console: yes or no?
-4. Besides README line 3, `README.md:83` and the Chinese planning notes under `doc/`
-   mention the company by name in the public repo. Rewrite README:83 too? Leave `doc/`
-   as is or move it out of the public repo?
+3. A read-only viewer login on the deployed console: yes or no?
+4. The Chinese planning notes under `doc/`: leave them in the public repo or move them
+   out?
 5. "Decisions" section in the README: you write it. I can leave an outline of headings only.
 
 ---
