@@ -89,6 +89,18 @@ export function assessFreshness(latest: Date | null, maxAgeHours: number, now: D
   return { status: ageHours <= maxAgeHours ? "ok" : "stale", ageHours };
 }
 
+export type ForecastWindow = { endsAt: Date; ended: boolean };
+
+/**
+ * The window a constraint-risk snapshot covers: `horizonHours` after `asOf`. Next Day
+ * Dispatch arrives a day late, so a snapshot's window has usually ended by the time staff
+ * see it; the UI must then present it as the latest scored forecast, not a live one.
+ */
+export function forecastWindow(asOf: Date, horizonHours: number, now: Date): ForecastWindow {
+  const endsAt = new Date(asOf.getTime() + horizonHours * 3_600_000);
+  return { endsAt, ended: now.getTime() >= endsAt.getTime() };
+}
+
 /** Freshness limits fixed in docs/console-PLAN.md section 3.2. */
 export const FRESHNESS_LIMITS_HOURS = {
   scada: 2,
