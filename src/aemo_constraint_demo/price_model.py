@@ -7,8 +7,8 @@ in the same form so they can be scored against each other.
 Four forecasts are built:
 
 - ``scenarios``: AEMO's 43 published scenario prices, read as a distribution exactly as
-  published. This is the thing the internship brief asks about, and it costs nothing to
-  produce — it is the bar a model has to clear.
+  published. It costs nothing to produce and is already public, so it is the bar any model
+  here has to clear.
 - ``scenarios_recentred``: the same spread, shifted so that the base scenario sits at its
   median. The published price sits at the 33rd percentile of the raw scenarios
   (`docs/price-lane-data.md`), so the shape is informative while its location is not.
