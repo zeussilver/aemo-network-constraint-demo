@@ -88,6 +88,18 @@ def test_adaptive_weights_learn_to_favour_the_accurate_forecast(tmp_path: Path) 
     assert selected["scenarios"] > 0.9  # after the warm-up it picks the leader every time
 
 
+def test_each_combination_weights_only_the_base_forecasts(tmp_path: Path) -> None:
+    """An ensemble must not become a member of the next one, or it is counted twice."""
+    path = predictions_csv(tmp_path)
+    out = tmp_path / "ensemble.json"
+
+    peb.main(["--region", "TEST1", "--predictions", str(path), "--out", str(out)])
+    report = json.loads(out.read_text())
+
+    for name in peb.COMBINATIONS:
+        assert set(report["weights"][name]["overall"]) == set(price_backtest.FORECASTS)
+
+
 def test_an_adaptive_ensemble_lands_between_its_members(tmp_path: Path) -> None:
     path = predictions_csv(tmp_path)
     out = tmp_path / "ensemble.json"

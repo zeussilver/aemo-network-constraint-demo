@@ -78,12 +78,15 @@ def main(argv: list[str] | None = None) -> int:
     scored = pd.read_csv(path, parse_dates=["published", "target"]).sort_values("target").reset_index(drop=True)
     log.info("%s: %d scored rows from %s", region, len(scored), path)
 
-    predictions: dict[str, dict[float, np.ndarray]] = {
+    # Every combination draws on the four base forecasts only. Letting one ensemble become a
+    # member of the next would weight the same forecast twice and flatter the result.
+    members: dict[str, dict[float, np.ndarray]] = {
         name: read_predictions(scored, name) for name in FORECASTS
     }
+    predictions: dict[str, dict[float, np.ndarray]] = dict(members)
     weights_report = {}
     for name, settings in COMBINATIONS.items():
-        result = ens.adaptive_ensemble(scored, predictions, window_days=args.window_days, **settings)
+        result = ens.adaptive_ensemble(scored, members, window_days=args.window_days, **settings)
         predictions[name] = result.predictions
         weights_report[name] = ens.weight_summary(result.weights, labels=scored["regime"])
         weights_report[name]["by_horizon"] = ens.weight_summary(
