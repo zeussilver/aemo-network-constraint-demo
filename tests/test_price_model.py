@@ -13,7 +13,46 @@ def frame_with_months() -> pd.DataFrame:
     published = pd.to_datetime(
         [f"2026-0{month}-15 10:00{NEM}" for month in (1, 2, 3, 4, 5)] * 2
     )
-    return pd.DataFrame({"published": sorted(published), "value": range(10)})
+    published = pd.Series(sorted(published))
+    return pd.DataFrame(
+        {"published": published, "target": published + pd.Timedelta("1h"), "value": range(10)}
+    )
+
+
+def test_monthly_folds_purge_training_rows_that_land_in_the_test_month() -> None:
+    """A forecast published in March for an April interval cannot train the April fold."""
+    published = pd.to_datetime(
+        [f"2026-03-31 23:{minute:02d}{NEM}" for minute in (0, 30)] + [f"2026-04-02 10:00{NEM}"]
+    )
+    frame = pd.DataFrame(
+        {
+            "published": published,
+            # the first March row forecasts an April interval; the second stays in March
+            "target": pd.to_datetime(
+                [f"2026-04-01 12:00{NEM}", f"2026-03-31 23:30{NEM}", f"2026-04-02 12:00{NEM}"]
+            ),
+        }
+    )
+
+    fold = pmodel.monthly_folds(frame, n_folds=1, min_train_months=1)[0]
+
+    assert fold.label == "2026-04"
+    assert list(fold.train) == [1]  # the March row whose interval is also in March
+    assert list(fold.test) == [2]
+
+
+def test_purging_can_be_turned_off() -> None:
+    published = pd.to_datetime([f"2026-03-31 23:00{NEM}", f"2026-04-02 10:00{NEM}"])
+    frame = pd.DataFrame(
+        {
+            "published": published,
+            "target": pd.to_datetime([f"2026-04-01 12:00{NEM}", f"2026-04-02 12:00{NEM}"]),
+        }
+    )
+
+    fold = pmodel.monthly_folds(frame, n_folds=1, min_train_months=1, target_column=None)[0]
+
+    assert list(fold.train) == [0]
 
 
 def test_monthly_folds_train_only_on_earlier_months() -> None:

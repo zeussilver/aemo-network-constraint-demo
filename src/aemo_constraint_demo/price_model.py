@@ -58,19 +58,33 @@ class Fold:
 
 
 def monthly_folds(
-    dataset: pd.DataFrame, n_folds: int = 6, min_train_months: int = 3, time_column: str = "published"
+    dataset: pd.DataFrame,
+    n_folds: int = 6,
+    min_train_months: int = 3,
+    time_column: str = "published",
+    target_column: str | None = "target",
 ) -> list[Fold]:
     """Expanding-window folds: train on everything published before a month, test on it.
 
     Rolling origin rather than a random split, because a price model that has seen next
     week cannot be evaluated on this week.
+
+    The folds are also **purged**. An interval is forecast up to 67 times, from runs
+    published over the previous day and a half, so a forecast published in March can be a
+    training row whose label is an April interval — the very outcome the April fold is
+    meant to test. Training rows whose interval falls inside the test month are dropped,
+    which costs about 2% of them and removes the overlap entirely.
     """
     months = dataset[time_column].dt.strftime("%Y-%m")
     ordered = sorted(months.unique())
     candidates = ordered[min_train_months:]
     folds = []
     for month in candidates[-n_folds:]:
-        train = np.flatnonzero((months < month).to_numpy())
+        before = (months < month).to_numpy()
+        if target_column is not None:
+            month_start = pd.Timestamp(f"{month}-01", tz=dataset[target_column].dt.tz)
+            before = before & (dataset[target_column] < month_start).to_numpy()
+        train = np.flatnonzero(before)
         test = np.flatnonzero((months == month).to_numpy())
         if len(train) and len(test):
             folds.append(Fold(label=month, train=train, test=test))
