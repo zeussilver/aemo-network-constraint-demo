@@ -10,6 +10,9 @@ The forecasting half answers a narrow but realistic question:
 
 It uses AEMO public NEMWeb data for dispatch labels and constraint mapping, adds weather/time features, trains a small ML classifier, and exposes the result three ways: a queryable FastAPI endpoint, an MCP server an agent can call directly, and the risk card in the site ops console below.
 
+A third strand asks the same kind of question about **prices** rather than constraints, and
+about a range rather than a number: [probabilistic price forecasting](#probabilistic-price-forecasting).
+
 ---
 
 ## Site ops console
@@ -95,6 +98,52 @@ Run it locally: [console/README.md](console/README.md). Deploy it: `infra/deploy
 push.
 
 <!-- ### Decisions: written by the repository author; uncomment the heading when it has content. -->
+
+---
+
+## Probabilistic price forecasting
+
+Every half hour AEMO publishes, for each region and each period out to about 39 hours, the
+price under 43 demand scenarios. That is a public statement of how uncertain the next day
+and a half of prices is, updated 48 times a day. Is it any good, and can it be beaten?
+
+A year of data — 525,600 five-minute prices and 4.85 million scenario rows — answers it over
+six rolling-origin folds, 485,830 scored forecasts per region. Four forecasts are written as
+the same seven quantiles and scored the same way: AEMO's scenarios as published, those
+scenarios recentred on their base case, persistence widened by its own error, and a
+gradient-boosted quantile model.
+
+| NSW1, Apr–Sep 2026 | CRPS | MAE | Median abs error | Bias | 80% interval covers |
+|---|---|---|---|---|---|
+| AEMO scenarios | 31.37 | 51.06 | 11.45 | +34.24 | 0.554 |
+| Persistence | 20.74 | 33.20 | 24.37 | −0.44 | 0.895 |
+| Quantile model | **8.14** | **13.17** | **9.38** | +0.44 | 0.649 |
+
+![NSW1, one day at a twelve-hour horizon](docs/images/price-day-NSW1.png)
+
+- The published scenarios are **biased high by $34/MWh** and far too narrow: the range
+  between their 25th and 75th percentiles holds the settled price 15% of the time.
+- They are still **the model's most valuable feature**. Dropping the base scenario and the
+  15 scenario-shape features costs 54% of the model's CRPS, uniformly across horizons.
+- Everything is honest about its own limits: the model halves the error and removes the
+  bias, but its 80% interval covers 65%, and in SA1's volatile hours its CRPS is 82 against
+  21 in normal conditions. On 31 July neither it nor AEMO saw the morning spike above $370.
+- Adaptive selection between the four lands within 0.9% of the best single forecast without
+  being told which one that is; inverse-loss weighting trades sharpness for the best
+  calibration of any forecast here except persistence.
+
+Full write-up: **[docs/price-forecasting.md](docs/price-forecasting.md)**. The data layer,
+including why the monthly archive cannot answer this question:
+[docs/price-lane-data.md](docs/price-lane-data.md).
+
+```bash
+python -m src.aemo_constraint_demo.price_ingest --from 2025-10 --to 2026-09 --raw-regions NSW1,SA1
+python scripts/price_data_checks.py --out artifacts/price_data_checks.json
+python -m src.aemo_constraint_demo.price_dataset --region NSW1
+python scripts/price_backtest.py --region NSW1 --predictions-out data/price/backtest_predictions_NSW1.csv.gz
+python scripts/price_ensemble_backtest.py --region NSW1
+python scripts/price_figures.py --region NSW1
+```
 
 ---
 
@@ -218,7 +267,9 @@ This is intentionally simple and auditable. The real production version should r
 ├── docs/
 │   ├── console-PLAN.md          # console plan, acceptance targets and progress log
 │   ├── console-METRICS.md       # measured numbers behind the README table
-│   ├── images/                  # README screenshots
+│   ├── price-lane-data.md       # price data layer: sources, decisions, what landed
+│   ├── price-forecasting.md     # probabilistic price forecasting: method and results
+│   ├── images/                  # README screenshots and price figures
 │   └── reports/                 # Phase 3 and Phase 6 run reports
 ├── notebooks/
 │   └── aemo_constraint_forecast_demo.ipynb
@@ -228,7 +279,11 @@ This is intentionally simple and auditable. The real production version should r
 │   ├── find_constrained_duids.py
 │   ├── train_lead_time_models.py
 │   ├── build_site_registry.py
-│   └── ops_data_checks.py
+│   ├── ops_data_checks.py
+│   ├── price_data_checks.py     # coverage, completeness and scenario alignment
+│   ├── price_backtest.py        # rolling-origin backtest of the four forecasts
+│   ├── price_ensemble_backtest.py
+│   └── price_figures.py
 ├── tests/
 │   ├── test_aemo_client.py
 │   ├── test_api.py
@@ -242,6 +297,15 @@ This is intentionally simple and auditable. The real production version should r
 │   ├── test_nemweb_stream.py
 │   ├── test_notebook_readme.py
 │   ├── test_ops_ingest.py
+│   ├── test_price_backtest.py
+│   ├── test_price_data_checks.py
+│   ├── test_price_dataset.py
+│   ├── test_price_ensemble.py
+│   ├── test_price_ensemble_backtest.py
+│   ├── test_price_figures.py
+│   ├── test_price_ingest.py
+│   ├── test_price_metrics.py
+│   ├── test_price_model.py
 │   ├── test_site_registry.py
 │   ├── test_train.py
 │   └── test_weather.py
@@ -255,7 +319,12 @@ This is intentionally simple and auditable. The real production version should r
     ├── mcp_server.py        # MCP tools over the same pipeline
     ├── site_registry.py     # AEMO registry rows for the console's sites
     ├── nemweb_stream.py     # row-streaming reader for large AEMO zips
-    └── ops_ingest.py        # NEMWeb → Postgres loader for the console
+    ├── ops_ingest.py        # NEMWeb → Postgres loader for the console
+    ├── price_ingest.py      # NEMWeb prices, demand and 43-scenario sensitivities
+    ├── price_dataset.py     # one row per published forecast, leakage-safe
+    ├── price_metrics.py     # pinball, CRPS, reliability, interval coverage
+    ├── price_model.py       # quantile models, regimes, purged rolling folds
+    └── price_ensemble.py    # adaptive weighting and selection
 ```
 
 ---
