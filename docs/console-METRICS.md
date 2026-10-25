@@ -8,13 +8,15 @@ the row says so.
 
 | Suite | Count | Source |
 |---|---|---|
-| pytest (Python pipeline, incl. 4 Postgres integration tests) | 125 passed | CI run 39287811049 |
-| Vitest (unit + 15 Postgres integration tests) | 46 passed | CI run 39287811049 |
-| Playwright (against the standalone production build) | 8 passed | CI run 39287811049 |
-| Runtime dependency audit (`npm audit --omit=dev`) | 0 vulnerabilities | CI run 39287811049 |
+| pytest (Python pipeline, incl. 4 Postgres integration tests) | 126 passed | CI on branch `stale-forecast-and-fuel-rule` |
+| Vitest (unit + 16 Postgres integration tests) | 48 passed | CI on branch `stale-forecast-and-fuel-rule` |
+| Playwright (against the standalone production build) | 8 passed | CI on branch `stale-forecast-and-fuel-rule` |
+| Runtime dependency audit (`npm audit --omit=dev`) | no high or critical advisory except GHSA-xcx6-jx8p-x3h5, allowed with its reason in `.github/scripts/audit-runtime.mjs` | CI on branch `stale-forecast-and-fuel-rule` |
 
-The original forecasting pipeline had 97 pytest tests. The console work added 22, and the
-Azure Functions ingest job added 6.
+The original forecasting pipeline had 97 pytest tests. The console work added 22, the
+Azure Functions ingest job 6 and the archive-URL fix 1. The forecast-window and fuel-rule
+fixes added 2 Vitest tests. CI run 39287811049 had 125 pytest and 46 Vitest, with 0
+audit findings at the time.
 
 ## Data (targets T2, T3)
 

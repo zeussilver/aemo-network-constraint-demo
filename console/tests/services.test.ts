@@ -113,6 +113,17 @@ describe.skipIf(!hasTestDb)("console services (Postgres)", () => {
       ).rejects.toThrow(/registered in SA1/);
     });
 
+    it("blocks changing a site's fuel away from its units' fuel, and leaves no trace", async () => {
+      const site = await windSite();
+      await assignUnit(db, admin, site.id, "CATHROCK");
+      const audits = await auditCount();
+      await expect(
+        updateSite(db, admin, site.id, 1, { ...siteFixture(site.customerId), fuel: "SOLAR" }),
+      ).rejects.toThrow(/CATHROCK is a wind unit/);
+      expect(await db.site.findUniqueOrThrow({ where: { id: site.id } })).toMatchObject({ fuel: "WIND", version: 1 });
+      expect(await auditCount()).toBe(audits);
+    });
+
     it("removes a unit and frees the DUID", async () => {
       const site = await windSite();
       await assignUnit(db, admin, site.id, "CATHROCK");

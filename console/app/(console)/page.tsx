@@ -67,10 +67,11 @@ export default async function OverviewPage() {
               <Td className="text-right tabular-nums">{site.selfForecastShare == null ? "—" : `${(site.selfForecastShare * 100).toFixed(0)}%`}</Td>
               <Td>
                 {site.snapshot ? (
-                  <span title={`As of ${formatNemTime(site.snapshot.as_of)}`}>
-                    <Badge tone={riskTone(site.snapshot.risk_level)}>
+                  <span title={`${site.snapshot.horizon_hours} h after ${formatNemTime(site.snapshot.as_of)}`}>
+                    <Badge tone={site.snapshot.window.ended ? "slate" : riskTone(site.snapshot.risk_level)}>
                       {(site.snapshot.probability * 100).toFixed(0)}% · {site.snapshot.risk_level.replace("_", " ")}
                     </Badge>
+                    {site.snapshot.window.ended && <span className="block text-xs text-slate-500">window ended</span>}
                   </span>
                 ) : (
                   <span className="text-xs text-slate-500">no model</span>

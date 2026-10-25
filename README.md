@@ -1,14 +1,24 @@
-# AEMO DUID Network Constraint Forecast Demo
+# NEM Site Ops Console
 
-Solar and wind farms in Australia's National Electricity Market are regularly held back by
-network constraints, and the people who operate them need to see it coming and see it
-happen. This repository works on both halves with AEMO's public NEMWeb data.
+A staff console for looking after solar and wind farm customers in Australia's National
+Electricity Market: manage customers, sites and their AEMO units, and watch each site's
+operations on AEMO's public NEMWeb data. It is deployed on Azure:
+**https://siteops-console-coxh2t.azurewebsites.net** (staff sign-in; accounts are created by
+an administrator).
 
-The forecasting half answers a narrow but realistic question:
+A staff member's path through it:
 
-> For a given AEMO Dispatchable Unit ID (`DUID`), forecast the next 1–72 hours in which network-related generic constraints are likely to bind.
+1. **Manage** customers and sites, and attach each site's AEMO units (DUIDs).
+2. **Watch** a site's trading day: actual output against available output and the dispatch
+   target, the curtailment that follows, and which forecast AEMO dispatch used.
+3. **Spot** stale data: every source shows its age, and a forecast whose window has ended
+   says so.
+4. **Change** records safely: roles are checked on the server, a stale form cannot overwrite
+   a newer edit, a site's region and fuel must match its units, and every change writes an
+   audit row in the same transaction.
 
-It uses AEMO public NEMWeb data for dispatch labels and constraint mapping, adds weather/time features, trains a small ML classifier, and exposes the result three ways: a queryable FastAPI endpoint, an MCP server an agent can call directly, and the risk card in the site ops console below.
+The repository also holds the constraint-risk model behind the console's risk card; see
+[Constraint forecasting](#constraint-forecasting).
 
 A third strand asks the same kind of question about **prices** rather than constraints, and
 about a range rather than a number: [probabilistic price forecasting](#probabilistic-price-forecasting).
@@ -17,11 +27,9 @@ about a range rather than a number: [probabilistic price forecasting](#probabili
 
 ## Site ops console
 
-A staff console (`console/`) for managing customers, sites and DUIDs and watching each site's
-operations, deployed on Azure: **https://siteops-console-coxh2t.azurewebsites.net** (staff
-sign-in; accounts are created by an administrator).
+The console lives in `console/`.
 
-![Cathedral Rocks on 17 Oct 2026: the semi-dispatch cap held the dispatch target near zero for most of the day while available output stayed at 10-20 MW](docs/images/console-site-cathedral-rocks.png)
+![Cathedral Rocks on 17 Oct 2026: the semi-dispatch cap held the dispatch target near zero for about 10 hours while available output stayed at 10-20 MW](docs/images/console-site-cathedral-rocks.png)
 
 *Real data: Cathedral Rocks (CATHROCK), trading day 2026-10-17. Shaded bands are intervals
 where AEMO applied the semi-dispatch cap; the estimate puts the curtailed energy at
@@ -33,13 +41,14 @@ where AEMO applied the semi-dispatch cap; the estimate puts the curtailed energy
   - Optimistic concurrency on edits.
   - An audit row written in the same transaction as each change.
   - A DUID can only be attached if it is in the AEMO registry and matches the site's
-    region and fuel.
+    region and fuel, and a site's region or fuel cannot be edited away from its units'.
 - **Watch**, per trading day:
   - actual output (SCADA) against available output (UIGF) and the dispatch target;
   - a curtailment estimate;
   - which forecast AEMO dispatch used (the participant's self-forecast or AWEFS/ASEFS),
     and how many submissions were suppressed;
-  - the constraint-risk forecast from this repository's model.
+  - the constraint-risk forecast from this repository's model, marked as ended once its
+    window has passed (Next Day Dispatch arrives a day late, so it usually has).
 
   Every data source shows its age.
 - **Data**: 12 real AEMO-registered solar and wind DUIDs across NSW, QLD, SA and VIC. All
@@ -71,7 +80,7 @@ flowchart LR
 
 | | |
 |---|---|
-| Tests in CI | 125 pytest, 46 Vitest, 8 Playwright |
+| Tests in CI | 126 pytest, 48 Vitest, 8 Playwright |
 | Data on Azure after the first load | 105,384 SCADA readings, 103,680 dispatch intervals, 65,943 forecast-origin rows |
 | Push to deployed and healthy | 6 min 26 s (build 48 s, migrate + deploy + smoke test 5 min 36 s) |
 | SCADA vs dispatch `INITIALMW` cross-check | median absolute difference 0.0 MW over 100,224 intervals |
@@ -98,6 +107,16 @@ Run it locally: [console/README.md](console/README.md). Deploy it: `infra/deploy
 push.
 
 <!-- ### Decisions: written by the repository author; uncomment the heading when it has content. -->
+
+---
+
+## Constraint forecasting
+
+The forecasting half answers a narrow but realistic question:
+
+> For a given AEMO Dispatchable Unit ID (`DUID`), forecast the next 1–72 hours in which network-related generic constraints are likely to bind.
+
+It uses AEMO public NEMWeb data for dispatch labels and constraint mapping, adds weather/time features, trains a small ML classifier, and exposes the result three ways: a queryable FastAPI endpoint, an MCP server an agent can call directly, and the risk card in the site ops console above. The shipped model covers one unit, Cathedral Rocks (`CATHROCK`).
 
 ---
 
