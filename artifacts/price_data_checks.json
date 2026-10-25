@@ -1,0 +1,249 @@
+{
+  "generated_at": "2026-10-25T09:29:31+00:00",
+  "price_dir": "data/price",
+  "coverage": {
+    "actual_price": {
+      "files": 12,
+      "rows": 525600,
+      "first": "2025-10-01T00:05:00+10:00",
+      "last": "2026-10-01T00:00:00+10:00",
+      "regions": [
+        "NSW1",
+        "QLD1",
+        "SA1",
+        "TAS1",
+        "VIC1"
+      ]
+    },
+    "region_demand": {
+      "files": 12,
+      "rows": 525600,
+      "first": "2025-10-01T00:05:00+10:00",
+      "last": "2026-10-01T00:00:00+10:00",
+      "regions": [
+        "NSW1",
+        "QLD1",
+        "SA1",
+        "TAS1",
+        "VIC1"
+      ]
+    },
+    "predispatch_price": {
+      "files": 12,
+      "rows": 87600,
+      "first": "2025-10-01T04:30:00+10:00",
+      "last": "2026-10-01T04:00:00+10:00",
+      "regions": [
+        "NSW1",
+        "QLD1",
+        "SA1",
+        "TAS1",
+        "VIC1"
+      ]
+    }
+  },
+  "actuals_completeness": {
+    "NSW1": {
+      "intervals": 105120,
+      "expected_intervals": 105120,
+      "missing_intervals": 0,
+      "duplicate_rows": 0,
+      "first": "2025-10-01T00:05:00+10:00",
+      "last": "2026-10-01T00:00:00+10:00",
+      "rrp_min": -999.99093,
+      "rrp_median": 71.10143,
+      "rrp_mean": 74.4793,
+      "rrp_max": 20300.0,
+      "share_negative": 0.0962,
+      "share_above_300": 0.00266,
+      "share_above_5000": 0.000361
+    },
+    "QLD1": {
+      "intervals": 105120,
+      "expected_intervals": 105120,
+      "missing_intervals": 0,
+      "duplicate_rows": 0,
+      "first": "2025-10-01T00:05:00+10:00",
+      "last": "2026-10-01T00:00:00+10:00",
+      "rrp_min": -245.64113,
+      "rrp_median": 66.581715,
+      "rrp_mean": 62.7635,
+      "rrp_max": 19727.85,
+      "share_negative": 0.14031,
+      "share_above_300": 0.00102,
+      "share_above_5000": 2.9e-05
+    },
+    "SA1": {
+      "intervals": 105120,
+      "expected_intervals": 105120,
+      "missing_intervals": 0,
+      "duplicate_rows": 0,
+      "first": "2025-10-01T00:05:00+10:00",
+      "last": "2026-10-01T00:00:00+10:00",
+      "rrp_min": -906.67518,
+      "rrp_median": 51.0,
+      "rrp_mean": 69.8724,
+      "rrp_max": 20300.0,
+      "share_negative": 0.29523,
+      "share_above_300": 0.01413,
+      "share_above_5000": 0.000637
+    },
+    "TAS1": {
+      "intervals": 105120,
+      "expected_intervals": 105120,
+      "missing_intervals": 0,
+      "duplicate_rows": 0,
+      "first": "2025-10-01T00:05:00+10:00",
+      "last": "2026-10-01T00:00:00+10:00",
+      "rrp_min": -1000.0,
+      "rrp_median": 79.24,
+      "rrp_mean": 69.3198,
+      "rrp_max": 23200.0,
+      "share_negative": 0.04772,
+      "share_above_300": 0.00147,
+      "share_above_5000": 6.7e-05
+    },
+    "VIC1": {
+      "intervals": 105120,
+      "expected_intervals": 105120,
+      "missing_intervals": 0,
+      "duplicate_rows": 0,
+      "first": "2025-10-01T00:05:00+10:00",
+      "last": "2026-10-01T00:00:00+10:00",
+      "rrp_min": -969.97235,
+      "rrp_median": 37.18378,
+      "rrp_mean": 47.9105,
+      "rrp_max": 19069.69,
+      "share_negative": 0.25871,
+      "share_above_300": 0.00204,
+      "share_above_5000": 1.9e-05
+    }
+  },
+  "sensitivity_coverage": {
+    "files": 52,
+    "rows": 4848480,
+    "runs": 17472,
+    "days": 365,
+    "runs_per_day_median": 48,
+    "runs_per_day_min": 1,
+    "scenarios_per_row": {
+      "43": 4848480
+    },
+    "horizon_min_minutes": -100,
+    "horizon_max_minutes": 2363,
+    "p90_minus_p10_median": 27.0779,
+    "p90_minus_p10_p95": 155.0616
+  },
+  "scenario_alignment": {
+    "compared": 34382,
+    "exact_match_best": [
+      {
+        "column": "rrpeep37",
+        "matches": 27958,
+        "share": 0.81316
+      },
+      {
+        "column": "rrpeep36",
+        "matches": 26900,
+        "share": 0.78239
+      },
+      {
+        "column": "rrpeep39",
+        "matches": 25706,
+        "share": 0.74766
+      }
+    ],
+    "closest_columns": [
+      {
+        "column": "rrpeep29",
+        "median_abs_diff": 0.0
+      },
+      {
+        "column": "rrpeep30",
+        "median_abs_diff": 0.0
+      },
+      {
+        "column": "rrpeep36",
+        "median_abs_diff": 0.0
+      },
+      {
+        "column": "rrpeep37",
+        "median_abs_diff": 0.0
+      },
+      {
+        "column": "rrpeep38",
+        "median_abs_diff": 0.0
+      }
+    ],
+    "best_column_by_month": {
+      "2025-10": {
+        "column": "rrpeep37",
+        "share": 0.8161,
+        "rows": 2300
+      },
+      "2025-11": {
+        "column": "rrpeep37",
+        "share": 0.7438,
+        "rows": 2880
+      },
+      "2025-12": {
+        "column": "rrpeep37",
+        "share": 0.836,
+        "rows": 2976
+      },
+      "2026-01": {
+        "column": "rrpeep37",
+        "share": 0.8458,
+        "rows": 2976
+      },
+      "2026-02": {
+        "column": "rrpeep37",
+        "share": 0.9085,
+        "rows": 2688
+      },
+      "2026-03": {
+        "column": "rrpeep37",
+        "share": 0.8925,
+        "rows": 2976
+      },
+      "2026-04": {
+        "column": "rrpeep37",
+        "share": 0.8646,
+        "rows": 2880
+      },
+      "2026-05": {
+        "column": "rrpeep37",
+        "share": 0.8511,
+        "rows": 2976
+      },
+      "2026-06": {
+        "column": "rrpeep37",
+        "share": 0.8729,
+        "rows": 2880
+      },
+      "2026-07": {
+        "column": "rrpeep37",
+        "share": 0.7809,
+        "rows": 2976
+      },
+      "2026-08": {
+        "column": "rrpeep37",
+        "share": 0.6841,
+        "rows": 2976
+      },
+      "2026-09": {
+        "column": "rrpeep37",
+        "share": 0.6684,
+        "rows": 2880
+      },
+      "2026-10": {
+        "column": "rrpeep36",
+        "share": 0.7778,
+        "rows": 18
+      }
+    },
+    "published_inside_scenario_range": 1.0,
+    "published_position_in_range_median": 0.3256,
+    "note": "A column that matched on nearly every run would be AEMO's unchanged case. If none does, the scenarios are a separate solve and the spread has to be anchored on the published forecast rather than assumed to be centred on it."
+  }
+}
