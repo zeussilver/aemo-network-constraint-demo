@@ -4,8 +4,9 @@ A staff console for looking after solar and wind farm customers in Australia's N
 Electricity Market: manage customers, sites and their AEMO units, and watch each site's
 operations on AEMO's public NEMWeb data. It is deployed on Azure:
 **https://siteops-console-coxh2t.azurewebsites.net** (staff sign-in; accounts are created by
-an administrator). The app runs on App Service's free F1 tier, which sleeps when idle: the
-first request can take up to about a minute.
+an administrator). The app runs on App Service's free F1 tier, which unloads it after about
+20 idle minutes; a timer in the ingest function app pings it every 10 minutes to keep it
+loaded. If a ping is missed, the first request can take up to about a minute.
 
 A staff member's path through it:
 
@@ -72,7 +73,7 @@ flowchart LR
 | Pipeline | Python on an hourly Azure Functions timer (Flex Consumption): a streaming reader for AEMO multi-table CSV zips, idempotent per-file loads |
 | Tests | pytest, Vitest (unit and Postgres integration), Playwright against the production build |
 | Delivery | GitHub Actions CI; deploy via OIDC (no Azure secret stored); Bicep for all infrastructure |
-| Operations | App Insights, `/api/health`, `/api/ready` (data freshness), ingest-failure log alert |
+| Operations | App Insights, `/api/health`, `/api/ready` (data freshness), ingest-failure log alert, a 10-minute keep-warm ping from the function app |
 
 **Measured** (details and sources in [docs/console-PLAN.md](docs/console-PLAN.md#11-progress-log)):
 
