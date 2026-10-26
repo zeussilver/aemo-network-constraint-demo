@@ -155,7 +155,7 @@ jobs:
       - name: Package the function (code, model bundle, Linux wheels)
         run: |
           mkdir -p build/src build/artifacts
-          cp functions/function_app.py functions/ingest_job.py functions/host.json build/
+          cp functions/function_app.py functions/ingest_job.py functions/keep_warm.py functions/host.json build/
           cp src/__init__.py build/src/
           cp -R src/aemo_constraint_demo build/src/
           find build/src -name __pycache__ -prune -exec rm -rf {} +
@@ -173,13 +173,15 @@ jobs:
         run: |
           az functionapp deployment source config-zip -g "${{ vars.AZURE_RESOURCE_GROUP }}" \
             -n "${{ vars.AZURE_FUNCTION_NAME }}" --src ingest-function.zip --build-remote false --timeout 900
-      - name: Confirm the timer function is registered
+      - name: Confirm the timer functions are registered
         run: |
           # The host syncs triggers shortly after a deploy; allow up to 2 minutes.
           for attempt in $(seq 1 12); do
             names="$(az functionapp function list -g "${{ vars.AZURE_RESOURCE_GROUP }}" \
               -n "${{ vars.AZURE_FUNCTION_NAME }}" --query "[].name" -o tsv)"
-            if echo "$names" | grep -q nemweb_ingest; then echo "registered: $names"; exit 0; fi
+            if echo "$names" | grep -q nemweb_ingest && echo "$names" | grep -q console_keep_warm; then
+              echo "registered: $names"; exit 0
+            fi
             sleep 10
           done
-          echo "::error::nemweb_ingest is not registered on ${{ vars.AZURE_FUNCTION_NAME }}"; exit 1
+          echo "::error::nemweb_ingest and console_keep_warm are not both registered on ${{ vars.AZURE_FUNCTION_NAME }}: $names"; exit 1
