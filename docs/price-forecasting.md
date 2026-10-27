@@ -13,9 +13,10 @@ scenarios. That is a published statement of price uncertainty, updated 48 times 
 the first question here is how good it is.
 
 - The data layer and what it contains: [price-lane-data.md](price-lane-data.md)
-- Code: `src/aemo_constraint_demo/price_{dataset,metrics,model,ensemble}.py`,
-  `scripts/price_{backtest,ensemble_backtest,figures}.py`
-- Results quoted below: `artifacts/price_backtest_*.json`, `artifacts/price_ensemble_*.json`
+- Code: `src/aemo_constraint_demo/price_{dataset,metrics,model,ensemble,conformal}.py`,
+  `scripts/price_{backtest,ensemble_backtest,conformal_backtest,figures}.py`
+- Results quoted below: `artifacts/price_backtest_*.json`, `artifacts/price_ensemble_*.json`,
+  `artifacts/price_conformal_*.json`
 
 ## What is being forecast, and from what
 
@@ -114,8 +115,6 @@ Six folds, April to September 2026, 485,830 scored forecasts per region. All fig
 | Persistence | 47.01 | 65.44 | 35.80 | +4.58 | 0.594 | 0.887 | 0.949 |
 | Quantile model | **23.09** | **32.03** | **13.73** | −10.22 | 0.396 | 0.667 | 0.808 |
 
-![NSW1 calibration](images/price-calibration-NSW1.png)
-
 **The published scenarios are biased high and far too narrow.** AEMO's scenario set
 over-forecasts the NSW1 price by $34/MWh on average, and the range between its 25th and
 75th scenario percentiles contains the settled price only **15%** of the time rather than
@@ -211,6 +210,73 @@ weighted ensemble is the best-calibrated forecast here apart from persistence �
 on a nominal 80% against the model's 65% — while scoring worse on CRPS. For an interval that
 has to be believed rather than a point that has to be close, that is the better of the two.
 
+### Can the intervals be made honest?
+
+The model's one clear failure is calibration, and fixing it does not need a better model.
+If the 90th percentile has been too low all month, move it up by however much it was out.
+That is split conformal prediction, applied one level at a time: pool the residuals
+`actual − forecast` over a trailing window of complete settled days, take their own quantile
+at that level, add it, and re-sort. Nothing is refitted — the layer reads the rows the
+backtest already saved and runs in about three seconds a region — and the same as-of rule
+the ensembles use applies, so a row published on a given day is corrected only from days
+that had already settled when it went out. The first three days of the record have no window
+behind them and keep the forecast exactly as the model produced it; that is 1.6% of the rows.
+
+![NSW1 calibration](images/price-calibration-NSW1.png)
+
+| NSW1 | CRPS | Median abs error | 50% cover | 80% cover | 90% cover | Mean 80% width |
+|---|---|---|---|---|---|---|
+| Quantile model | 8.14 | 9.38 | 0.376 | 0.649 | 0.799 | 31.57 |
+| Recalibrated, 28-day window | **7.98** | **9.11** | **0.495** | **0.788** | **0.890** | 41.54 |
+
+| SA1 | CRPS | Median abs error | 50% cover | 80% cover | 90% cover | Mean 80% width |
+|---|---|---|---|---|---|---|
+| Quantile model | **23.09** | **13.73** | 0.396 | 0.667 | 0.808 | 58.66 |
+| Recalibrated, 28-day window | 23.23 | 13.78 | **0.494** | **0.793** | **0.893** | 78.02 |
+
+**All three intervals become close to honest, and in NSW1 the score improves while it
+happens.** The 80% interval goes from holding 65% of outcomes to holding 79%, the 50% from
+38% to 49%, the 90% from 80% to 89%. In NSW1 that costs nothing — CRPS falls 2% — because a
+forecast this over-confident is punished for the outcomes it misses by more than it is paid
+for being narrow. In SA1 it costs 0.6%. The intervals end up about a third wider, which is
+the price of the honesty and also the point: an 80% band that covers 65% is not an 80% band.
+
+The correction has the shape of a forecast that was too narrow at both ends. In NSW1 the 5th
+percentile is pushed down $4.99 and the 95th up $6.56. SA1 is lopsided — down $7.83 at the
+bottom, up **$23.07** at the top — which is the scarcity tail the quantile regression smooths
+away coming back as an offset.
+
+**The window barely matters, which is the useful part.**
+
+| Trailing window | NSW1 CRPS | NSW1 80% cover | | SA1 CRPS | SA1 80% cover |
+|---|---|---|---|---|---|
+| none | 8.14 | 0.649 | | 23.09 | 0.667 |
+| 7 days | 8.18 | 0.761 | | 23.68 | 0.773 |
+| 14 days | 7.96 | 0.788 | | 23.45 | 0.789 |
+| 28 days | 7.98 | 0.788 | | 23.23 | 0.793 |
+| 56 days | 7.96 | 0.788 | | 23.05 | 0.803 |
+
+Anything from two weeks to two months lands in the same place; only the seven-day window is
+short enough for its own noise to cost anything, and even that is far better calibrated than
+no correction. The 28-day window is the one reported above. The gain is consistent rather
+than averaged, too: 80% coverage rises in **all six folds in both regions**, from a range of
+0.57–0.71 to 0.70–0.85, while CRPS improves in four of the six NSW1 folds and costs at most
+1.8% in any SA1 fold.
+
+**Where it does not reach.** One offset per level is applied at every horizon, and the
+model's over-confidence is not flat: two hours out its 80% interval already covers 74%,
+beyond a day only 61%. The correction lifts both by about the same amount, so the short
+horizons come out over-covered (0.88 in NSW1) and the long ones still short (0.75). Offsets
+per horizon bucket are the obvious next version. The other gap is SA1's volatile regime,
+which reaches 0.71 against 0.78–0.84 everywhere else: when the distribution changes shape in
+an afternoon, a month of residuals is the wrong reference for it.
+
+**Against the ensemble, this is the cheap way to buy the same thing.** Inverse-loss weighting
+also widens the forecast — that is exactly why it is better covered — but it pays 92% of CRPS
+in NSW1 to reach 0.861. Recalibration reaches 0.788 for −2%. Averaging four distributions
+buys coverage by blurring the answer; correcting one distribution buys it by moving the
+quantiles to where the errors say they already were.
+
 ### What none of them do
 
 ![NSW1, one day at a twelve-hour horizon](images/price-day-NSW1.png)
@@ -223,15 +289,17 @@ what was coming.
 
 That is the honest summary of the whole exercise. A quantile model on publication-time
 features, with AEMO's own sensitivities as its most valuable input, halves the error of the
-published forecast and removes its bias. It does not predict scarcity, it is over-confident
-about its own range, and in the volatile hours that decide a trading month it is as lost as
-everything else.
+published forecast and removes its bias, and a rolling conformal correction then makes its
+intervals mean what they say — for nothing in NSW1 and 0.6% of CRPS in SA1. It still does not
+predict scarcity, and in the volatile hours that decide a trading month it is as lost as
+everything else. A wider interval that is honest about a spike it cannot see is worth more
+than a narrow one that is not, but neither of them is a forecast of the spike.
 
 ## What would come next
 
-- **Calibrate the model's own intervals.** Conformal prediction on a rolling window would
-  widen the quantiles to their observed coverage without touching the point forecast, which
-  would fix the one axis where persistence beats the model.
+- **Recalibrate per horizon, and per regime.** The offsets above are one number per level
+  for the whole market; the miscalibration they correct is strongest beyond a day and in
+  SA1's volatile hours, which is where splitting them would pay.
 - **Model the spike separately.** A classifier for "price above $300 in this interval",
   trained on the same features, would let the distribution carry a tail the quantile
   regression smooths away.
