@@ -32,17 +32,25 @@ def test_notebook_is_cleared_and_contains_core_workflow_sections() -> None:
             assert cell.get("outputs") == []
 
 
-def test_readme_documents_run_method_tests_limitations_and_extensions() -> None:
+def test_readme_and_forecasting_doc_document_run_method_limitations_and_extensions() -> None:
     readme = (ROOT / "README.md").read_text()
+    doc = (ROOT / "docs" / "constraint-forecasting.md").read_text()
 
     for expected in [
         "python -m pytest",
+        "uvicorn app:app --reload",
+        "DUID -> CONNECTIONPOINTID -> GENCONID",
+        "GET /forecast/{duid}",
+        "docs/constraint-forecasting.md",
+    ]:
+        assert expected in readme
+
+    for expected in [
         "scripts/backtest_horizon_model.py",
         "Phase 2.5",
-        "uvicorn app:app --reload",
         "DUID -> CONNECTIONPOINTID -> GENCONID",
         "## Known limitations",
         "## Next production extensions",
         "GET /forecast/{duid}",
     ]:
-        assert expected in readme
+        assert expected in doc
