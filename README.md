@@ -171,6 +171,9 @@ gradient-boosted quantile model.
 - Adaptive selection between the four lands within 0.9% of the best single forecast without
   being told which one that is; inverse-loss weighting trades sharpness for the best
   calibration of any forecast here except persistence.
+- A rolling **conformal recalibration**, read from the model's own settled residuals, then
+  makes its intervals mean what they say: 80% coverage goes from 0.65 to 0.79 and 50% from
+  0.38 to 0.49, for −2% of CRPS in NSW1 and +0.6% in SA1, refitting nothing.
 
 Full write-up: **[docs/price-forecasting.md](docs/price-forecasting.md)**. The data layer,
 including why the monthly archive cannot answer this question:
@@ -182,6 +185,7 @@ python scripts/price_data_checks.py --out artifacts/price_data_checks.json
 python -m src.aemo_constraint_demo.price_dataset --region NSW1
 python scripts/price_backtest.py --region NSW1 --predictions-out data/price/backtest_predictions_NSW1.csv.gz
 python scripts/price_ensemble_backtest.py --region NSW1
+python scripts/price_conformal_backtest.py --region NSW1
 python scripts/price_figures.py --region NSW1
 ```
 
