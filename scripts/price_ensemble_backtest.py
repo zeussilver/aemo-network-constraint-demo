@@ -44,15 +44,21 @@ COMBINATIONS = {
 }
 
 
-def score_slices(scored: pd.DataFrame, predictions: dict[str, dict[float, np.ndarray]]) -> dict:
-    """Compact scores for every forecast, overall and per horizon bucket and regime."""
+SLICES = (("horizon_bucket", "by_horizon"), ("regime", "by_regime"))
+
+
+def score_slices(
+    scored: pd.DataFrame,
+    predictions: dict[str, dict[float, np.ndarray]],
+    slices: tuple[tuple[str, str], ...] = SLICES,
+) -> dict:
+    """Compact scores for every forecast, overall and for each slice of the test rows."""
     actual = scored["actual_rrp"].to_numpy(dtype=float)
     report = {
         "overall": {name: compact_score(actual, quantiles) for name, quantiles in predictions.items()},
-        "by_horizon": {},
-        "by_regime": {},
+        **{key: {} for _, key in slices},
     }
-    for column, key in (("horizon_bucket", "by_horizon"), ("regime", "by_regime")):
+    for column, key in slices:
         for value, index in scored.groupby(column, sort=False).indices.items():
             mask = np.zeros(len(scored), dtype=bool)
             mask[index] = True
