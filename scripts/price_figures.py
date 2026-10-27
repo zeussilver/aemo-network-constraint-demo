@@ -25,17 +25,20 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.price_backtest import FORECASTS, read_predictions
+from src.aemo_constraint_demo import price_conformal as conformal
 from src.aemo_constraint_demo import price_metrics as metrics
 from src.aemo_constraint_demo import price_model as pmodel
 
 log = logging.getLogger("price_figures")
 
 SHOWN = ("scenarios", "persistence", "model")
+CALIBRATED = "model_conformal"  # drawn on the calibration figure only, where it is the point
 COLOURS = {
     "scenarios": "#c4622d",
     "scenarios_recentred": "#d9a441",
     "persistence": "#6b7280",
     "model": "#1f6feb",
+    "model_conformal": "#8250df",
     "ensemble_weight": "#2f8f5b",
 }
 LABELS = {
@@ -43,6 +46,7 @@ LABELS = {
     "scenarios_recentred": "AEMO scenarios, recentred",
     "persistence": "Persistence",
     "model": "Quantile model",
+    "model_conformal": "Quantile model, recalibrated",
     "ensemble_weight": "Adaptive ensemble",
 }
 
@@ -169,6 +173,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--predictions", default=None)
     parser.add_argument("--out-dir", default="docs/images")
     parser.add_argument("--horizon-min", type=int, default=720)
+    parser.add_argument(
+        "--conformal-window",
+        type=int,
+        default=conformal.DEFAULT_WINDOW_DAYS,
+        help="Trailing settled days behind the recalibrated forecast; 0 leaves it off the figure.",
+    )
     parser.add_argument("--day", default=None, help="Day to draw (default: the most eventful one).")
     args = parser.parse_args(argv)
 
@@ -179,8 +189,19 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     names = tuple(name for name in SHOWN if f"{name}_q50" in scored.columns)
 
+    # The recalibrated forecast is rebuilt here rather than stored: it is a few seconds of
+    # arithmetic on rows the backtest already saved, and only the calibration figure shows it.
+    calibration_names = names
+    if args.conformal_window and "model_q50" in scored.columns:
+        result = conformal.rolling_conformal(
+            scored, read_predictions(scored, "model"), window_days=args.conformal_window
+        )
+        for level, values in result.predictions.items():
+            scored[f"{CALIBRATED}_q{int(level * 100):02d}"] = values
+        calibration_names = names + (CALIBRATED,)
+
     made = [
-        calibration_figure(scored, names, out_dir / f"price-calibration-{region}.png", region),
+        calibration_figure(scored, calibration_names, out_dir / f"price-calibration-{region}.png", region),
         horizon_figure(scored, names, out_dir / f"price-crps-by-horizon-{region}.png", region),
         day_figure(scored, out_dir / f"price-day-{region}.png", region, args.horizon_min, args.day),
     ]

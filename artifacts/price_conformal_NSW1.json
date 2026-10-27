@@ -1,0 +1,476 @@
+{
+  "generated_at": "2026-10-27T10:22:36+00:00",
+  "region": "NSW1",
+  "predictions": "data/price/backtest_predictions_NSW1.csv.gz",
+  "rows": 485830,
+  "forecast": "model",
+  "window_days": 28,
+  "baseline": {
+    "crps": 8.1412,
+    "mae_median": 13.1684,
+    "median_abs_error": 9.3773,
+    "coverage_50": 0.37571,
+    "coverage_80": 0.64922,
+    "coverage_90": 0.79875,
+    "width_80": 31.5676
+  },
+  "windows": {
+    "7": {
+      "crps": 8.1837,
+      "mae_median": 13.3816,
+      "median_abs_error": 9.4523,
+      "coverage_50": 0.46947,
+      "coverage_80": 0.76084,
+      "coverage_90": 0.86727,
+      "width_80": 41.7499,
+      "crps_vs_baseline_pct": 0.52
+    },
+    "14": {
+      "crps": 7.9643,
+      "mae_median": 13.0914,
+      "median_abs_error": 9.0571,
+      "coverage_50": 0.49523,
+      "coverage_80": 0.7877,
+      "coverage_90": 0.8885,
+      "width_80": 41.9477,
+      "crps_vs_baseline_pct": -2.17
+    },
+    "28": {
+      "crps": 7.9809,
+      "mae_median": 13.1166,
+      "median_abs_error": 9.1087,
+      "coverage_50": 0.49513,
+      "coverage_80": 0.78767,
+      "coverage_90": 0.88989,
+      "width_80": 41.5381,
+      "crps_vs_baseline_pct": -1.97
+    },
+    "56": {
+      "crps": 7.9608,
+      "mae_median": 13.1023,
+      "median_abs_error": 9.1312,
+      "coverage_50": 0.49595,
+      "coverage_80": 0.78798,
+      "coverage_90": 0.89054,
+      "width_80": 41.4965,
+      "crps_vs_baseline_pct": -2.22
+    }
+  },
+  "offsets": {
+    "window_days": 28,
+    "days_with_offsets": 181,
+    "rows_corrected": 477838,
+    "share_corrected": 0.9835,
+    "mean_offset": {
+      "0.05": -4.9878,
+      "0.1": -5.1588,
+      "0.25": -3.9231,
+      "0.5": -2.0359,
+      "0.75": 0.5419,
+      "0.9": 4.8231,
+      "0.95": 6.5558
+    }
+  },
+  "reliability": {
+    "model": [
+      {
+        "level": 0.05,
+        "nominal": 0.05,
+        "empirical": 0.11123,
+        "gap": 0.06123,
+        "pinball": 1.69046
+      },
+      {
+        "level": 0.1,
+        "nominal": 0.1,
+        "empirical": 0.19808,
+        "gap": 0.09808,
+        "pinball": 2.88085
+      },
+      {
+        "level": 0.25,
+        "nominal": 0.25,
+        "empirical": 0.36201,
+        "gap": 0.11201,
+        "pinball": 5.09078
+      },
+      {
+        "level": 0.5,
+        "nominal": 0.5,
+        "empirical": 0.56287,
+        "gap": 0.06287,
+        "pinball": 6.58419
+      },
+      {
+        "level": 0.75,
+        "nominal": 0.75,
+        "empirical": 0.73773,
+        "gap": -0.01227,
+        "pinball": 5.76949
+      },
+      {
+        "level": 0.9,
+        "nominal": 0.9,
+        "empirical": 0.8473,
+        "gap": -0.0527,
+        "pinball": 3.83008
+      },
+      {
+        "level": 0.95,
+        "nominal": 0.95,
+        "empirical": 0.90998,
+        "gap": -0.04002,
+        "pinball": 2.64831
+      }
+    ],
+    "model_conformal": [
+      {
+        "level": 0.05,
+        "nominal": 0.05,
+        "empirical": 0.05297,
+        "gap": 0.00297,
+        "pinball": 1.55349
+      },
+      {
+        "level": 0.1,
+        "nominal": 0.1,
+        "empirical": 0.10311,
+        "gap": 0.00311,
+        "pinball": 2.649
+      },
+      {
+        "level": 0.25,
+        "nominal": 0.25,
+        "empirical": 0.25063,
+        "gap": 0.00063,
+        "pinball": 4.88199
+      },
+      {
+        "level": 0.5,
+        "nominal": 0.5,
+        "empirical": 0.50164,
+        "gap": 0.00164,
+        "pinball": 6.5583
+      },
+      {
+        "level": 0.75,
+        "nominal": 0.75,
+        "empirical": 0.74576,
+        "gap": -0.00424,
+        "pinball": 5.84831
+      },
+      {
+        "level": 0.9,
+        "nominal": 0.9,
+        "empirical": 0.89078,
+        "gap": -0.00922,
+        "pinball": 3.82465
+      },
+      {
+        "level": 0.95,
+        "nominal": 0.95,
+        "empirical": 0.94286,
+        "gap": -0.00714,
+        "pinball": 2.61734
+      }
+    ]
+  },
+  "intervals": {
+    "model": [
+      {
+        "nominal": 0.9,
+        "coverage": 0.79875,
+        "mean_width": 49.2825
+      },
+      {
+        "nominal": 0.8,
+        "coverage": 0.64922,
+        "mean_width": 31.5676
+      },
+      {
+        "nominal": 0.5,
+        "coverage": 0.37571,
+        "mean_width": 15.7661
+      }
+    ],
+    "model_conformal": [
+      {
+        "nominal": 0.9,
+        "coverage": 0.88989,
+        "mean_width": 60.8376
+      },
+      {
+        "nominal": 0.8,
+        "coverage": 0.78767,
+        "mean_width": 41.5381
+      },
+      {
+        "nominal": 0.5,
+        "coverage": 0.49513,
+        "mean_width": 20.231
+      }
+    ]
+  },
+  "overall": {
+    "model": {
+      "n": 485830,
+      "crps": 8.1412,
+      "mae_median": 13.1684,
+      "coverage_80": 0.64922,
+      "width_80": 31.5676
+    },
+    "model_conformal": {
+      "n": 485830,
+      "crps": 7.9809,
+      "mae_median": 13.1166,
+      "coverage_80": 0.78767,
+      "width_80": 41.5381
+    }
+  },
+  "by_horizon": {
+    "0-2h": {
+      "model": {
+        "n": 35130,
+        "crps": 5.712,
+        "mae_median": 9.5261,
+        "coverage_80": 0.73971,
+        "width_80": 27.5292
+      },
+      "model_conformal": {
+        "n": 35130,
+        "crps": 5.8648,
+        "mae_median": 9.5832,
+        "coverage_80": 0.87879,
+        "width_80": 37.4813
+      }
+    },
+    "2-6h": {
+      "model": {
+        "n": 70212,
+        "crps": 7.3799,
+        "mae_median": 12.1449,
+        "coverage_80": 0.68095,
+        "width_80": 29.8436
+      },
+      "model_conformal": {
+        "n": 70212,
+        "crps": 7.318,
+        "mae_median": 12.1363,
+        "coverage_80": 0.82161,
+        "width_80": 39.8034
+      }
+    },
+    "6-12h": {
+      "model": {
+        "n": 105198,
+        "crps": 8.1977,
+        "mae_median": 13.374,
+        "coverage_80": 0.65318,
+        "width_80": 31.3931
+      },
+      "model_conformal": {
+        "n": 105198,
+        "crps": 8.0204,
+        "mae_median": 13.3073,
+        "coverage_80": 0.79297,
+        "width_80": 41.3588
+      }
+    },
+    "12-24h": {
+      "model": {
+        "n": 185212,
+        "crps": 8.7159,
+        "mae_median": 14.0334,
+        "coverage_80": 0.63739,
+        "width_80": 32.7184
+      },
+      "model_conformal": {
+        "n": 185212,
+        "crps": 8.5001,
+        "mae_median": 13.968,
+        "coverage_80": 0.77378,
+        "width_80": 42.6907
+      }
+    },
+    "24h+": {
+      "model": {
+        "n": 90078,
+        "crps": 8.4343,
+        "mae_median": 13.3678,
+        "coverage_80": 0.60888,
+        "width_80": 32.3242
+      },
+      "model_conformal": {
+        "n": 90078,
+        "crps": 8.209,
+        "mae_median": 13.2854,
+        "coverage_80": 0.74805,
+        "width_80": 42.312
+      }
+    }
+  },
+  "by_regime": {
+    "normal": {
+      "model": {
+        "n": 222348,
+        "crps": 7.8948,
+        "mae_median": 12.7802,
+        "coverage_80": 0.64681,
+        "width_80": 29.8935
+      },
+      "model_conformal": {
+        "n": 222348,
+        "crps": 7.7264,
+        "mae_median": 12.7127,
+        "coverage_80": 0.78483,
+        "width_80": 39.5008
+      }
+    },
+    "high_vre": {
+      "model": {
+        "n": 77900,
+        "crps": 7.3669,
+        "mae_median": 12.1235,
+        "coverage_80": 0.69275,
+        "width_80": 32.854
+      },
+      "model_conformal": {
+        "n": 77900,
+        "crps": 7.2884,
+        "mae_median": 12.1125,
+        "coverage_80": 0.81299,
+        "width_80": 41.675
+      }
+    },
+    "peak_demand": {
+      "model": {
+        "n": 163075,
+        "crps": 8.8697,
+        "mae_median": 14.1903,
+        "coverage_80": 0.62403,
+        "width_80": 32.6763
+      },
+      "model_conformal": {
+        "n": 163075,
+        "crps": 8.6492,
+        "mae_median": 14.1233,
+        "coverage_80": 0.77482,
+        "width_80": 43.626
+      }
+    },
+    "volatile": {
+      "model": {
+        "n": 22507,
+        "crps": 7.9768,
+        "mae_median": 13.2156,
+        "coverage_80": 0.70485,
+        "width_80": 35.6211
+      },
+      "model_conformal": {
+        "n": 22507,
+        "crps": 8.0489,
+        "mae_median": 13.2875,
+        "coverage_80": 0.82117,
+        "width_80": 46.0638
+      }
+    }
+  },
+  "by_fold": {
+    "2026-04": {
+      "model": {
+        "n": 79910,
+        "crps": 6.1341,
+        "mae_median": 10.2642,
+        "coverage_80": 0.71274,
+        "width_80": 29.5164
+      },
+      "model_conformal": {
+        "n": 79910,
+        "crps": 6.1953,
+        "mae_median": 10.3591,
+        "coverage_80": 0.79091,
+        "width_80": 34.2936
+      }
+    },
+    "2026-05": {
+      "model": {
+        "n": 82584,
+        "crps": 10.1012,
+        "mae_median": 15.7875,
+        "coverage_80": 0.56619,
+        "width_80": 30.8518
+      },
+      "model_conformal": {
+        "n": 82584,
+        "crps": 9.7234,
+        "mae_median": 15.9564,
+        "coverage_80": 0.69568,
+        "width_80": 39.6862
+      }
+    },
+    "2026-06": {
+      "model": {
+        "n": 79920,
+        "crps": 8.9552,
+        "mae_median": 14.4203,
+        "coverage_80": 0.64478,
+        "width_80": 34.6425
+      },
+      "model_conformal": {
+        "n": 79920,
+        "crps": 8.9638,
+        "mae_median": 14.251,
+        "coverage_80": 0.82404,
+        "width_80": 49.1465
+      }
+    },
+    "2026-07": {
+      "model": {
+        "n": 82584,
+        "crps": 8.5891,
+        "mae_median": 13.849,
+        "coverage_80": 0.61324,
+        "width_80": 32.8811
+      },
+      "model_conformal": {
+        "n": 82584,
+        "crps": 8.1497,
+        "mae_median": 13.3356,
+        "coverage_80": 0.77475,
+        "width_80": 42.7152
+      }
+    },
+    "2026-08": {
+      "model": {
+        "n": 82584,
+        "crps": 7.6725,
+        "mae_median": 12.4075,
+        "coverage_80": 0.65601,
+        "width_80": 29.1505
+      },
+      "model_conformal": {
+        "n": 82584,
+        "crps": 7.5048,
+        "mae_median": 12.5318,
+        "coverage_80": 0.82515,
+        "width_80": 42.6698
+      }
+    },
+    "2026-09": {
+      "model": {
+        "n": 78248,
+        "crps": 7.3127,
+        "mae_median": 12.1762,
+        "coverage_80": 0.70732,
+        "width_80": 32.4422
+      },
+      "model_conformal": {
+        "n": 78248,
+        "crps": 7.2858,
+        "mae_median": 12.1629,
+        "coverage_80": 0.81839,
+        "width_80": 40.6834
+      }
+    }
+  }
+}
