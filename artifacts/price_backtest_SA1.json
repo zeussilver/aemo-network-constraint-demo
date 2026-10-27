@@ -1,0 +1,905 @@
+{
+  "generated_at": "2026-10-25T10:30:52+00:00",
+  "region": "SA1",
+  "dataset": {
+    "path": "data/price/dataset_SA1.csv.gz",
+    "rows": 951973,
+    "dropped_features": [],
+    "first_published": "2025-10-08 00:39:12+10:00",
+    "last_target": "2026-10-01 00:00:00+10:00",
+    "features": [
+      "aemo_base",
+      "p05",
+      "p10",
+      "p25",
+      "p50",
+      "p75",
+      "p90",
+      "p95",
+      "min",
+      "max",
+      "mean",
+      "std",
+      "iqr",
+      "range",
+      "share_negative",
+      "share_above_300",
+      "horizon_min",
+      "half_hour_of_day",
+      "day_of_week",
+      "month",
+      "last_rrp",
+      "last_demand",
+      "last_vre_share",
+      "last_available_generation",
+      "rrp_mean_1h",
+      "rrp_std_1h",
+      "rrp_max_1h",
+      "demand_mean_1h",
+      "rrp_mean_6h",
+      "rrp_std_6h",
+      "rrp_max_6h",
+      "demand_mean_6h",
+      "rrp_mean_24h",
+      "rrp_std_24h",
+      "rrp_max_24h",
+      "demand_mean_24h",
+      "vre_share_mean_24h",
+      "share_negative_24h",
+      "share_above_300_24h"
+    ]
+  },
+  "folds": [
+    {
+      "label": "2026-04",
+      "train_rows": 464400,
+      "test_rows": 79910
+    },
+    {
+      "label": "2026-05",
+      "train_rows": 544310,
+      "test_rows": 82584
+    },
+    {
+      "label": "2026-06",
+      "train_rows": 626894,
+      "test_rows": 79920
+    },
+    {
+      "label": "2026-07",
+      "train_rows": 706814,
+      "test_rows": 82584
+    },
+    {
+      "label": "2026-08",
+      "train_rows": 789398,
+      "test_rows": 82584
+    },
+    {
+      "label": "2026-09",
+      "train_rows": 871982,
+      "test_rows": 78248
+    }
+  ],
+  "quantiles": [
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    0.9,
+    0.95
+  ],
+  "regime_counts": {
+    "normal": 204063,
+    "peak_demand": 138836,
+    "high_vre": 110096,
+    "volatile": 32835
+  },
+  "overall": {
+    "scenarios": {
+      "point": {
+        "mae": 66.1574,
+        "median_abs_error": 14.8684,
+        "rmse": 678.755,
+        "bias": 28.791,
+        "n": 485830
+      },
+      "crps": 44.2744,
+      "pinball_by_level": {
+        "0.05": 4.8007,
+        "0.1": 13.13918,
+        "0.25": 34.52555,
+        "0.5": 33.0787,
+        "0.75": 27.7586,
+        "0.9": 22.73293,
+        "0.95": 18.92475
+      },
+      "reliability": [
+        {
+          "level": 0.05,
+          "nominal": 0.05,
+          "empirical": 0.0715,
+          "gap": 0.0215,
+          "pinball": 4.8007
+        },
+        {
+          "level": 0.1,
+          "nominal": 0.1,
+          "empirical": 0.26322,
+          "gap": 0.16322,
+          "pinball": 13.13918
+        },
+        {
+          "level": 0.25,
+          "nominal": 0.25,
+          "empirical": 0.4675,
+          "gap": 0.2175,
+          "pinball": 34.52555
+        },
+        {
+          "level": 0.5,
+          "nominal": 0.5,
+          "empirical": 0.52665,
+          "gap": 0.02665,
+          "pinball": 33.0787
+        },
+        {
+          "level": 0.75,
+          "nominal": 0.75,
+          "empirical": 0.59338,
+          "gap": -0.15662,
+          "pinball": 27.7586
+        },
+        {
+          "level": 0.9,
+          "nominal": 0.9,
+          "empirical": 0.74793,
+          "gap": -0.15207,
+          "pinball": 22.73293
+        },
+        {
+          "level": 0.95,
+          "nominal": 0.95,
+          "empirical": 0.83159,
+          "gap": -0.11841,
+          "pinball": 18.92475
+        }
+      ],
+      "intervals": [
+        {
+          "nominal": 0.9,
+          "coverage": 0.76025,
+          "mean_width": 253.7078
+        },
+        {
+          "nominal": 0.8,
+          "coverage": 0.48491,
+          "mean_width": 119.1462
+        },
+        {
+          "nominal": 0.5,
+          "coverage": 0.12666,
+          "mean_width": 24.702
+        }
+      ]
+    },
+    "scenarios_recentred": {
+      "point": {
+        "mae": 63.8375,
+        "median_abs_error": 14.6932,
+        "rmse": 654.2889,
+        "bias": 25.6761,
+        "n": 485830
+      },
+      "crps": 43.42755,
+      "pinball_by_level": {
+        "0.05": 4.97814,
+        "0.1": 12.66929,
+        "0.25": 33.57373,
+        "0.5": 31.91873,
+        "0.75": 27.3023,
+        "0.9": 22.64022,
+        "0.95": 18.91404
+      },
+      "reliability": [
+        {
+          "level": 0.05,
+          "nominal": 0.05,
+          "empirical": 0.06685,
+          "gap": 0.01685,
+          "pinball": 4.97814
+        },
+        {
+          "level": 0.1,
+          "nominal": 0.1,
+          "empirical": 0.24578,
+          "gap": 0.14578,
+          "pinball": 12.66929
+        },
+        {
+          "level": 0.25,
+          "nominal": 0.25,
+          "empirical": 0.44911,
+          "gap": 0.19911,
+          "pinball": 33.57373
+        },
+        {
+          "level": 0.5,
+          "nominal": 0.5,
+          "empirical": 0.51169,
+          "gap": 0.01169,
+          "pinball": 31.91873
+        },
+        {
+          "level": 0.75,
+          "nominal": 0.75,
+          "empirical": 0.57984,
+          "gap": -0.17016,
+          "pinball": 27.3023
+        },
+        {
+          "level": 0.9,
+          "nominal": 0.9,
+          "empirical": 0.7359,
+          "gap": -0.1641,
+          "pinball": 22.64022
+        },
+        {
+          "level": 0.95,
+          "nominal": 0.95,
+          "empirical": 0.82295,
+          "gap": -0.12705,
+          "pinball": 18.91404
+        }
+      ],
+      "intervals": [
+        {
+          "nominal": 0.9,
+          "coverage": 0.75624,
+          "mean_width": 253.7078
+        },
+        {
+          "nominal": 0.8,
+          "coverage": 0.49029,
+          "mean_width": 119.1462
+        },
+        {
+          "nominal": 0.5,
+          "coverage": 0.13142,
+          "mean_width": 24.702
+        }
+      ]
+    },
+    "persistence": {
+      "point": {
+        "mae": 65.4406,
+        "median_abs_error": 35.8026,
+        "rmse": 415.0684,
+        "bias": 4.5767,
+        "n": 485830
+      },
+      "crps": 47.00798,
+      "pinball_by_level": {
+        "0.05": 16.7521,
+        "0.1": 21.52476,
+        "0.25": 29.62749,
+        "0.5": 32.72028,
+        "0.75": 28.82648,
+        "0.9": 20.06144,
+        "0.95": 15.01538
+      },
+      "reliability": [
+        {
+          "level": 0.05,
+          "nominal": 0.05,
+          "empirical": 0.0274,
+          "gap": -0.0226,
+          "pinball": 16.7521
+        },
+        {
+          "level": 0.1,
+          "nominal": 0.1,
+          "empirical": 0.06206,
+          "gap": -0.03794,
+          "pinball": 21.52476
+        },
+        {
+          "level": 0.25,
+          "nominal": 0.25,
+          "empirical": 0.21084,
+          "gap": -0.03916,
+          "pinball": 29.62749
+        },
+        {
+          "level": 0.5,
+          "nominal": 0.5,
+          "empirical": 0.51686,
+          "gap": 0.01686,
+          "pinball": 32.72028
+        },
+        {
+          "level": 0.75,
+          "nominal": 0.75,
+          "empirical": 0.80477,
+          "gap": 0.05477,
+          "pinball": 28.82648
+        },
+        {
+          "level": 0.9,
+          "nominal": 0.9,
+          "empirical": 0.94916,
+          "gap": 0.04916,
+          "pinball": 20.06144
+        },
+        {
+          "level": 0.95,
+          "nominal": 0.95,
+          "empirical": 0.97674,
+          "gap": 0.02674,
+          "pinball": 15.01538
+        }
+      ],
+      "intervals": [
+        {
+          "nominal": 0.9,
+          "coverage": 0.94934,
+          "mean_width": 293.7896
+        },
+        {
+          "nominal": 0.8,
+          "coverage": 0.8871,
+          "mean_width": 216.1337
+        },
+        {
+          "nominal": 0.5,
+          "coverage": 0.59392,
+          "mean_width": 99.7777
+        }
+      ]
+    },
+    "model": {
+      "point": {
+        "mae": 32.0296,
+        "median_abs_error": 13.7251,
+        "rmse": 254.4404,
+        "bias": -10.2189,
+        "n": 485830
+      },
+      "crps": 23.08819,
+      "pinball_by_level": {
+        "0.05": 3.47574,
+        "0.1": 5.68442,
+        "0.25": 10.64406,
+        "0.5": 16.01482,
+        "0.75": 17.26371,
+        "0.9": 15.00546,
+        "0.95": 12.72042
+      },
+      "reliability": [
+        {
+          "level": 0.05,
+          "nominal": 0.05,
+          "empirical": 0.09881,
+          "gap": 0.04881,
+          "pinball": 3.47574
+        },
+        {
+          "level": 0.1,
+          "nominal": 0.1,
+          "empirical": 0.16918,
+          "gap": 0.06918,
+          "pinball": 5.68442
+        },
+        {
+          "level": 0.25,
+          "nominal": 0.25,
+          "empirical": 0.31802,
+          "gap": 0.06802,
+          "pinball": 10.64406
+        },
+        {
+          "level": 0.5,
+          "nominal": 0.5,
+          "empirical": 0.52747,
+          "gap": 0.02747,
+          "pinball": 16.01482
+        },
+        {
+          "level": 0.75,
+          "nominal": 0.75,
+          "empirical": 0.71439,
+          "gap": -0.03561,
+          "pinball": 17.26371
+        },
+        {
+          "level": 0.9,
+          "nominal": 0.9,
+          "empirical": 0.83572,
+          "gap": -0.06428,
+          "pinball": 15.00546
+        },
+        {
+          "level": 0.95,
+          "nominal": 0.95,
+          "empirical": 0.90708,
+          "gap": -0.04292,
+          "pinball": 12.72042
+        }
+      ],
+      "intervals": [
+        {
+          "nominal": 0.9,
+          "coverage": 0.80827,
+          "mean_width": 97.6877
+        },
+        {
+          "nominal": 0.8,
+          "coverage": 0.66654,
+          "mean_width": 58.6631
+        },
+        {
+          "nominal": 0.5,
+          "coverage": 0.39636,
+          "mean_width": 28.9714
+        }
+      ]
+    }
+  },
+  "by_horizon": {
+    "0-2h": {
+      "scenarios": {
+        "n": 35130,
+        "crps": 18.8533,
+        "mae_median": 24.2833,
+        "coverage_80": 0.62667,
+        "width_80": 40.4241
+      },
+      "scenarios_recentred": {
+        "n": 35130,
+        "crps": 18.9071,
+        "mae_median": 24.2025,
+        "coverage_80": 0.62405,
+        "width_80": 40.4241
+      },
+      "persistence": {
+        "n": 35130,
+        "crps": 24.4794,
+        "mae_median": 29.1009,
+        "coverage_80": 0.85585,
+        "width_80": 67.8624
+      },
+      "model": {
+        "n": 35130,
+        "crps": 18.2099,
+        "mae_median": 25.3761,
+        "coverage_80": 0.74187,
+        "width_80": 50.5542
+      }
+    },
+    "2-6h": {
+      "scenarios": {
+        "n": 70212,
+        "crps": 25.2019,
+        "mae_median": 33.301,
+        "coverage_80": 0.51797,
+        "width_80": 46.0197
+      },
+      "scenarios_recentred": {
+        "n": 70212,
+        "crps": 25.1269,
+        "mae_median": 32.988,
+        "coverage_80": 0.52112,
+        "width_80": 46.0197
+      },
+      "persistence": {
+        "n": 70212,
+        "crps": 41.0903,
+        "mae_median": 52.8254,
+        "coverage_80": 0.88466,
+        "width_80": 170.8683
+      },
+      "model": {
+        "n": 70212,
+        "crps": 22.1557,
+        "mae_median": 30.5807,
+        "coverage_80": 0.69101,
+        "width_80": 54.8009
+      }
+    },
+    "6-12h": {
+      "scenarios": {
+        "n": 105198,
+        "crps": 28.5857,
+        "mae_median": 38.4108,
+        "coverage_80": 0.48721,
+        "width_80": 56.8993
+      },
+      "scenarios_recentred": {
+        "n": 105198,
+        "crps": 28.4311,
+        "mae_median": 37.9744,
+        "coverage_80": 0.4907,
+        "width_80": 56.8993
+      },
+      "persistence": {
+        "n": 105198,
+        "crps": 48.6582,
+        "mae_median": 65.7988,
+        "coverage_80": 0.93222,
+        "width_80": 248.7285
+      },
+      "model": {
+        "n": 105198,
+        "crps": 23.5694,
+        "mae_median": 32.2938,
+        "coverage_80": 0.6724,
+        "width_80": 56.5244
+      }
+    },
+    "12-24h": {
+      "scenarios": {
+        "n": 185212,
+        "crps": 41.6762,
+        "mae_median": 60.6716,
+        "coverage_80": 0.45379,
+        "width_80": 113.9996
+      },
+      "scenarios_recentred": {
+        "n": 185212,
+        "crps": 41.0519,
+        "mae_median": 58.9382,
+        "coverage_80": 0.46014,
+        "width_80": 113.9996
+      },
+      "persistence": {
+        "n": 185212,
+        "crps": 50.2496,
+        "mae_median": 70.7918,
+        "coverage_80": 0.89409,
+        "width_80": 232.5096
+      },
+      "model": {
+        "n": 185212,
+        "crps": 24.1046,
+        "mae_median": 33.2243,
+        "coverage_80": 0.65442,
+        "width_80": 60.219
+      }
+    },
+    "24h+": {
+      "scenarios": {
+        "n": 90078,
+        "crps": 92.7191,
+        "mae_median": 151.7818,
+        "coverage_80": 0.46514,
+        "width_80": 290.1241
+      },
+      "scenarios_recentred": {
+        "n": 90078,
+        "crps": 89.6533,
+        "mae_median": 143.6185,
+        "coverage_80": 0.47562,
+        "width_80": 290.1241
+      },
+      "persistence": {
+        "n": 90078,
+        "crps": 51.8141,
+        "mae_median": 78.0247,
+        "coverage_80": 0.8341,
+        "width_80": 237.5044
+      },
+      "model": {
+        "n": 90078,
+        "crps": 23.0656,
+        "mae_median": 32.9891,
+        "coverage_80": 0.63615,
+        "width_80": 64.1346
+      }
+    }
+  },
+  "by_regime": {
+    "high_vre": {
+      "scenarios": {
+        "n": 110096,
+        "crps": 24.7825,
+        "mae_median": 38.7244,
+        "coverage_80": 0.47256,
+        "width_80": 59.2648
+      },
+      "scenarios_recentred": {
+        "n": 110096,
+        "crps": 24.8319,
+        "mae_median": 38.5819,
+        "coverage_80": 0.47028,
+        "width_80": 59.2648
+      },
+      "persistence": {
+        "n": 110096,
+        "crps": 27.2044,
+        "mae_median": 39.3501,
+        "coverage_80": 0.94014,
+        "width_80": 213.8162
+      },
+      "model": {
+        "n": 110096,
+        "crps": 10.8941,
+        "mae_median": 16.7657,
+        "coverage_80": 0.69436,
+        "width_80": 40.9733
+      }
+    },
+    "normal": {
+      "scenarios": {
+        "n": 204063,
+        "crps": 47.2166,
+        "mae_median": 72.7375,
+        "coverage_80": 0.48379,
+        "width_80": 122.9736
+      },
+      "scenarios_recentred": {
+        "n": 204063,
+        "crps": 46.2206,
+        "mae_median": 70.0508,
+        "coverage_80": 0.49195,
+        "width_80": 122.9736
+      },
+      "persistence": {
+        "n": 204063,
+        "crps": 37.9932,
+        "mae_median": 57.8301,
+        "coverage_80": 0.88739,
+        "width_80": 217.2346
+      },
+      "model": {
+        "n": 204063,
+        "crps": 21.4845,
+        "mae_median": 30.1668,
+        "coverage_80": 0.65759,
+        "width_80": 56.1353
+      }
+    },
+    "peak_demand": {
+      "scenarios": {
+        "n": 138836,
+        "crps": 34.6474,
+        "mae_median": 49.217,
+        "coverage_80": 0.49764,
+        "width_80": 97.9739
+      },
+      "scenarios_recentred": {
+        "n": 138836,
+        "crps": 34.0225,
+        "mae_median": 47.6464,
+        "coverage_80": 0.50259,
+        "width_80": 97.9739
+      },
+      "persistence": {
+        "n": 138836,
+        "crps": 36.0403,
+        "mae_median": 53.4524,
+        "coverage_80": 0.9036,
+        "width_80": 217.1485
+      },
+      "model": {
+        "n": 138836,
+        "crps": 21.1042,
+        "mae_median": 29.7954,
+        "coverage_80": 0.66849,
+        "width_80": 56.3357
+      }
+    },
+    "volatile": {
+      "scenarios": {
+        "n": 32835,
+        "crps": 132.0515,
+        "mae_median": 188.8752,
+        "coverage_80": 0.4794,
+        "width_80": 385.6657
+      },
+      "scenarios_recentred": {
+        "n": 32835,
+        "crps": 128.188,
+        "mae_median": 178.3656,
+        "coverage_80": 0.49511,
+        "width_80": 385.6657
+      },
+      "persistence": {
+        "n": 32835,
+        "crps": 215.8094,
+        "mae_median": 250.9091,
+        "coverage_80": 0.63764,
+        "width_80": 212.772
+      },
+      "model": {
+        "n": 32835,
+        "crps": 82.3301,
+        "mae_median": 104.2342,
+        "coverage_80": 0.62059,
+        "width_80": 143.5278
+      }
+    }
+  },
+  "by_fold": {
+    "2026-04": {
+      "scenarios": {
+        "n": 79910,
+        "crps": 27.096,
+        "mae_median": 42.8523,
+        "coverage_80": 0.48812,
+        "width_80": 64.3515
+      },
+      "scenarios_recentred": {
+        "n": 79910,
+        "crps": 27.0695,
+        "mae_median": 42.6994,
+        "coverage_80": 0.48776,
+        "width_80": 64.3515
+      },
+      "persistence": {
+        "n": 79910,
+        "crps": 34.6632,
+        "mae_median": 56.6491,
+        "coverage_80": 0.87661,
+        "width_80": 234.5508
+      },
+      "model": {
+        "n": 79910,
+        "crps": 14.7754,
+        "mae_median": 22.8983,
+        "coverage_80": 0.61846,
+        "width_80": 52.471
+      }
+    },
+    "2026-05": {
+      "scenarios": {
+        "n": 82584,
+        "crps": 25.3154,
+        "mae_median": 38.5294,
+        "coverage_80": 0.52755,
+        "width_80": 72.4525
+      },
+      "scenarios_recentred": {
+        "n": 82584,
+        "crps": 24.9769,
+        "mae_median": 37.858,
+        "coverage_80": 0.53222,
+        "width_80": 72.4525
+      },
+      "persistence": {
+        "n": 82584,
+        "crps": 27.5818,
+        "mae_median": 40.3789,
+        "coverage_80": 0.95136,
+        "width_80": 227.9445
+      },
+      "model": {
+        "n": 82584,
+        "crps": 13.1509,
+        "mae_median": 21.2062,
+        "coverage_80": 0.71312,
+        "width_80": 60.2481
+      }
+    },
+    "2026-06": {
+      "scenarios": {
+        "n": 79920,
+        "crps": 65.2257,
+        "mae_median": 84.8822,
+        "coverage_80": 0.50124,
+        "width_80": 107.212
+      },
+      "scenarios_recentred": {
+        "n": 79920,
+        "crps": 64.7273,
+        "mae_median": 83.3488,
+        "coverage_80": 0.49965,
+        "width_80": 107.212
+      },
+      "persistence": {
+        "n": 79920,
+        "crps": 102.6596,
+        "mae_median": 120.4565,
+        "coverage_80": 0.86221,
+        "width_80": 215.6652
+      },
+      "model": {
+        "n": 79920,
+        "crps": 53.727,
+        "mae_median": 65.1603,
+        "coverage_80": 0.68271,
+        "width_80": 75.2574
+      }
+    },
+    "2026-07": {
+      "scenarios": {
+        "n": 82584,
+        "crps": 86.5016,
+        "mae_median": 137.6902,
+        "coverage_80": 0.44797,
+        "width_80": 270.0526
+      },
+      "scenarios_recentred": {
+        "n": 82584,
+        "crps": 83.5762,
+        "mae_median": 129.9448,
+        "coverage_80": 0.45985,
+        "width_80": 270.0526
+      },
+      "persistence": {
+        "n": 82584,
+        "crps": 56.3226,
+        "mae_median": 75.2494,
+        "coverage_80": 0.84995,
+        "width_80": 210.4503
+      },
+      "model": {
+        "n": 82584,
+        "crps": 31.8648,
+        "mae_median": 43.4236,
+        "coverage_80": 0.60827,
+        "width_80": 67.8368
+      }
+    },
+    "2026-08": {
+      "scenarios": {
+        "n": 82584,
+        "crps": 37.4813,
+        "mae_median": 56.0352,
+        "coverage_80": 0.48796,
+        "width_80": 134.1202
+      },
+      "scenarios_recentred": {
+        "n": 82584,
+        "crps": 36.5554,
+        "mae_median": 53.3271,
+        "coverage_80": 0.49873,
+        "width_80": 134.1202
+      },
+      "persistence": {
+        "n": 82584,
+        "crps": 29.4039,
+        "mae_median": 48.1074,
+        "coverage_80": 0.90453,
+        "width_80": 206.9915
+      },
+      "model": {
+        "n": 82584,
+        "crps": 13.3654,
+        "mae_median": 21.4283,
+        "coverage_80": 0.70813,
+        "width_80": 53.5288
+      }
+    },
+    "2026-09": {
+      "scenarios": {
+        "n": 78248,
+        "crps": 23.0307,
+        "mae_median": 35.178,
+        "coverage_80": 0.4557,
+        "width_80": 61.5029
+      },
+      "scenarios_recentred": {
+        "n": 78248,
+        "crps": 22.7308,
+        "mae_median": 34.2375,
+        "coverage_80": 0.4623,
+        "width_80": 61.5029
+      },
+      "persistence": {
+        "n": 78248,
+        "crps": 32.0256,
+        "mae_median": 52.6188,
+        "coverage_80": 0.87621,
+        "width_80": 200.9858
+      },
+      "model": {
+        "n": 78248,
+        "crps": 11.7705,
+        "mae_median": 18.1031,
+        "coverage_80": 0.66757,
+        "width_80": 42.1017
+      }
+    }
+  }
+}

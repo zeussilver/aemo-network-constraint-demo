@@ -54,14 +54,15 @@ def _iter_csv_members(zf: zipfile.ZipFile, depth: int = 0) -> Iterator[io.TextIO
 
 
 def iter_table_rows(
-    path: str | Path,
+    path: str | Path | io.IOBase,
     tables: Iterable[str],
     duids: Iterable[str] | None = None,
 ) -> Iterator[tuple[str, dict[str, str]]]:
     """Yield ``(table, row)`` for wanted tables, optionally only for the given DUIDs.
 
     ``tables`` are ``REPORT,TABLE`` keys, e.g. ``"DISPATCH,UNIT_SCADA"``. Rows of a table
-    without a ``DUID`` column are never filtered by DUID.
+    without a ``DUID`` column are never filtered by DUID. ``path`` is a zip on disk or an
+    in-memory one (e.g. a member of an archive zip opened as ``io.BytesIO``).
     """
     wanted = {table.upper() for table in tables}
     duid_filter = {duid.upper() for duid in duids} if duids is not None else None
