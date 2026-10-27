@@ -312,7 +312,7 @@ After the demo period, you choose: keep or delete. Delete = one command,
   and network curtailment. Labelled as such. Attributing it to binding network
   constraints (via this repo's DUID → GENCONID mapping) is a stretch, not a promise.
 - **Model coverage**: only CATHROCK has a bundle, and its probabilities are near-saturated
-  (see README Phase 5). The card shows the model's own caveats.
+  (see docs/constraint-forecasting.md, Phase 5). The card shows the model's own caveats.
 
 ## 9. Guard-rails
 - No git commit, push, PR or GitHub setting change without your explicit OK. Work goes
