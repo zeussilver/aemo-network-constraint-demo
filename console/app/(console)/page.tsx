@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FreshnessStrip } from "@/components/freshness";
+import { formatAge, FreshnessStrip } from "@/components/freshness";
 import { riskTone } from "@/components/risk-card";
 import { Badge, Forbidden, PageHeader, SyntheticBadge, Table, Td, Th } from "@/components/ui";
 import { requireActor } from "@/lib/dal";
@@ -57,6 +57,13 @@ export default async function OverviewPage() {
                 <span className="block text-xs text-slate-500">
                   {site.latestMw != null ? `${((site.latestMw / site.capacityMw) * 100).toFixed(0)}% of ${site.capacityMw.toFixed(0)} MW` : ""}
                 </span>
+                {site.latestFreshness.status === "stale" && (
+                  <span className="mt-0.5 block">
+                    <Badge tone="amber" title={`Newest SCADA reading ${formatNemTime(site.latestAt)}; the limit is 2 h.`}>
+                      ▲ Stale · {formatAge(site.latestFreshness.ageHours)} old
+                    </Badge>
+                  </span>
+                )}
               </Td>
               <Td className="text-right tabular-nums">
                 {site.curtailment.intervals ? `${site.curtailment.curtailedMwh.toFixed(1)} MWh` : "—"}
