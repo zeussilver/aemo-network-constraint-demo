@@ -13,11 +13,16 @@ A staff member's path through it:
 1. **Manage** customers and sites, and attach each site's AEMO units (DUIDs).
 2. **Watch** a site's trading day: actual output against available output and the dispatch
    target, the curtailment that follows, and which forecast AEMO dispatch used.
-3. **Spot** stale data: every source shows its age, and a forecast whose window has ended
-   says so.
+3. **Spot** stale data: every source shows its age, a site whose SCADA has stopped is
+   flagged on its own, and a forecast whose window has ended says so.
 4. **Change** records safely: roles are checked on the server, a stale form cannot overwrite
    a newer edit, a site's region and fuel must match its units, and every change writes an
    audit row in the same transaction.
+
+A [sandbox mode](#sandbox-simulator) runs the same console on simulated farms calibrated on
+these DUIDs. It is used to test the console against scripted situations (a network
+constraint, a silent SCADA feed, a suppressed self-forecast, a failed load) and to train
+staff on it.
 
 The repository also holds two forecasting pieces built on the same NEMWeb data:
 
@@ -83,7 +88,7 @@ flowchart LR
 
 | | |
 |---|---|
-| Tests in CI | 126 pytest, 48 Vitest, 8 Playwright |
+| Tests in CI | 253 pytest, 58 Vitest, 14 Playwright (5 of them on the sandbox) |
 | Data on Azure after the first load | 105,384 SCADA readings, 103,680 dispatch intervals, 65,943 forecast-origin rows |
 | Push to deployed and healthy | 6 min 26 s (build 48 s, migrate + deploy + smoke test 5 min 36 s) |
 | SCADA vs dispatch `INITIALMW` cross-check | median absolute difference 0.0 MW over 100,224 intervals |
@@ -110,6 +115,32 @@ Run it locally: [console/README.md](console/README.md). Deploy it: `infra/deploy
 push.
 
 <!-- ### Decisions: written by the repository author; uncomment the heading when it has content. -->
+
+---
+
+## Sandbox simulator
+
+The sandbox is the console build above with `CONSOLE_SANDBOX=1`, on its own database, which
+a simulator fills with solar and wind farms that behave like the real ones. The farms are
+calibrated on the 12 real DUIDs, and a realism report checks the simulated fleet against
+the real one. All 16 checks pass: output distribution, daily shape, 5-minute ramps, cap and
+curtailment shares, tracking, and forecast source.
+
+- **Scenarios**: a world file scripts events relative to the time it is loaded. In the
+  training world, a ten-hour network constraint holds a wind farm back, a solar farm's
+  SCADA stops, AEMO suppresses a farm's self-forecasts, and the latest SCADA load fails.
+  Rows appear on NEMWeb's cadence: SCADA every 5 minutes, Next Day files 12 and 20 minutes
+  after the trading day ends.
+- **Testing**: Playwright checks that each scenario shows where it should. The SCADA outage
+  found a gap: the fleet-wide freshness check stayed green while one farm was silent for
+  three hours. The console now flags each site against the same 2-hour limit.
+- **Training**: a Training page asks staff to find each scenario in the console and checks
+  their answers on the server. The answers are read from the data the simulator wrote, so
+  they always match the screen.
+- **Safety**: the simulator refuses any database whose name does not end in `_sandbox` or
+  `_e2e`.
+
+Design, results and limits: [docs/simulation.md](docs/simulation.md).
 
 ---
 
@@ -233,6 +264,7 @@ curl "http://127.0.0.1:8000/forecast/CATHROCK?model_path=artifacts/cathrock_6h_b
 - Training, backtests and historical replays:
   [docs/constraint-forecasting.md](docs/constraint-forecasting.md#runs).
 - Price forecasting: the commands in [its section](#probabilistic-price-forecasting).
+- The sandbox: [docs/simulation.md](docs/simulation.md#run-it).
 
 ## Repository layout
 
@@ -240,15 +272,15 @@ curl "http://127.0.0.1:8000/forecast/CATHROCK?model_path=artifacts/cathrock_6h_b
 console/                   Next.js site ops console
 functions/                 Azure Functions app: hourly NEMWeb ingest, console keep-warm ping
 infra/                     Bicep, deploy.sh, database role SQL
-src/aemo_constraint_demo/  Python: NEMWeb reader and ingest, constraint model, price forecasting
+src/aemo_constraint_demo/  Python: NEMWeb reader and ingest, constraint model, price forecasting, sandbox simulator
 app.py                     FastAPI forecast service
 run_mcp_server.py          MCP server
 scripts/                   target scans, training, backtests, data checks, figures
 tests/                     pytest suite
 notebooks/                 constraint-forecasting walkthrough
-docs/                      console plan and metrics, forecasting write-ups, run reports
+docs/                      console plan and metrics, forecasting and simulator write-ups, run reports
 artifacts/                 committed model bundles, metrics and scan results
-data/                      the console's DUIDs, their registry rows, unit coordinates
+data/                      the console's DUIDs, their registry rows, unit coordinates, sandbox worlds (sim/)
 docker-compose.yml         local Postgres for the console and ingest
 .github/workflows/         ci.yml, deploy.yml, ingest.yml
 ```

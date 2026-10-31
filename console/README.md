@@ -24,6 +24,10 @@ DATABASE_URL=postgresql://ops:ops_local_only@127.0.0.1:55460/ops_console \
   python -m src.aemo_constraint_demo.ops_ingest --trigger backfill
 ```
 
+Or run it as the sandbox, on simulated farms with a Training page: set `CONSOLE_SANDBOX=1`
+and point `DATABASE_URL` at a database the simulator has loaded
+([`../docs/simulation.md`](../docs/simulation.md#run-it)).
+
 ## Checks
 
 | Command | What it runs |
@@ -31,16 +35,17 @@ DATABASE_URL=postgresql://ops:ops_local_only@127.0.0.1:55460/ops_console \
 | `npm run lint` / `npm run typecheck` | ESLint, `tsc --noEmit` |
 | `npm test` | Vitest: unit tests plus service integration tests on `TEST_DATABASE_URL` |
 | `npm run build` | Standalone production build (`.next/standalone/server.js`) |
-| `npm run test:e2e` | Resets `E2E_DATABASE_URL` (name must end in `_e2e`), then Playwright against the standalone build |
+| `npm run test:e2e` | Resets `E2E_DATABASE_URL` and `SANDBOX_E2E_DATABASE_URL` (names must end in `_e2e`; the simulator loads the second), then Playwright against the standalone build, normally and in sandbox mode |
 
 ## Layout
 
 ```
-app/(console)/     authenticated pages: overview, sites, customers, status, audit
+app/(console)/     authenticated pages: overview, sites, customers, status, audit, training (sandbox only)
 app/api/           auth handler, /api/health (liveness), /api/ready (DB + data freshness)
 lib/services/      data access with permission checks; used by pages and server actions
 lib/rbac.ts        the role → permission table
 lib/ops-math.ts    trading days, curtailment estimate, forecast-origin categories, freshness
+lib/training.ts    training tasks: manifest validation, answer checking, what reaches the browser
 prisma/            schema (owns the ops tables too), migrations, seed
-e2e/               Playwright specs and the e2e database preparation
+e2e/               Playwright specs and the e2e database preparation; e2e/sandbox/ runs in sandbox mode
 ```

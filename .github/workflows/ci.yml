@@ -31,6 +31,8 @@ jobs:
           --health-cmd "pg_isready -U ops" --health-interval 2s --health-timeout 3s --health-retries 20
     env:
       TEST_DATABASE_URL: postgresql://ops:ci_only@localhost:5432/ops_console_test
+      # The simulator only writes to databases named *_sandbox or *_e2e.
+      SANDBOX_TEST_DATABASE_URL: postgresql://ops:ci_only@localhost:5432/ops_console_test_sandbox
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -38,10 +40,13 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Apply the console's Prisma migrations (the ops tables the ingest job writes)
+      - name: Apply the console's Prisma migrations (the ops tables the ingest job and the simulator write)
         run: |
-          for f in console/prisma/migrations/*/migration.sql; do
-            psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+          psql "$TEST_DATABASE_URL" -c "CREATE DATABASE ops_console_test_sandbox"
+          for url in "$TEST_DATABASE_URL" "$SANDBOX_TEST_DATABASE_URL"; do
+            for f in console/prisma/migrations/*/migration.sql; do
+              psql "$url" -v ON_ERROR_STOP=1 -q -f "$f"
+            done
           done
       - run: python -m pytest -q
 
@@ -66,6 +71,8 @@ jobs:
       DATABASE_URL: postgresql://ops:ci_only@localhost:5432/ops_console
       TEST_DATABASE_URL: postgresql://ops:ci_only@localhost:5432/ops_console_test
       E2E_DATABASE_URL: postgresql://ops:ci_only@localhost:5432/ops_console_e2e
+      SANDBOX_E2E_DATABASE_URL: postgresql://ops:ci_only@localhost:5432/ops_console_sim_e2e
+      SIM_PYTHON: python
       BETTER_AUTH_URL: http://localhost:3000
       SEED_ADMIN_EMAIL: admin@example.com
       SEED_VIEWER_EMAIL: viewer@example.com
@@ -77,9 +84,17 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: console/package-lock.json
+      # The sandbox e2e project has the simulator load its world (e2e/prepare-sandbox.ts),
+      # with the ingest job's dependencies.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-ingest.txt
+      - run: pip install -r ../requirements-ingest.txt
       - name: Create test databases
         run: |
-          psql postgresql://ops:ci_only@localhost:5432/ops_console -c "CREATE DATABASE ops_console_test" -c "CREATE DATABASE ops_console_e2e"
+          psql postgresql://ops:ci_only@localhost:5432/ops_console -c "CREATE DATABASE ops_console_test" -c "CREATE DATABASE ops_console_e2e" -c "CREATE DATABASE ops_console_sim_e2e"
       - name: Generate throwaway secrets for this run
         run: |
           for name in BETTER_AUTH_SECRET SEED_ADMIN_PASSWORD SEED_VIEWER_PASSWORD; do
