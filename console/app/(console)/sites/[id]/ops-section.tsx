@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatAge } from "@/components/freshness";
 import { RiskCard } from "@/components/risk-card";
 import { SiteOpsChart } from "@/components/site-ops-chart";
 import { Badge, Card, Table, Td, Th } from "@/components/ui";
@@ -10,19 +11,22 @@ type SiteOps = NonNullable<Awaited<ReturnType<typeof getSiteOps>>>;
 
 const CATEGORY_TONE: Record<OriginCategory, "green" | "blue" | "amber"> = { self: "green", aemo: "blue", fallback: "amber" };
 
-function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
+function Stat({ label, value, note, warning }: { label: string; value: string; note?: string; warning?: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+    <div className={warning ? "rounded-lg border border-amber-300 bg-amber-50 px-4 py-3" : "rounded-lg border border-slate-200 bg-white px-4 py-3"}>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{value}</p>
       {note && <p className="mt-0.5 text-xs text-slate-500">{note}</p>}
+      {warning && <p className="mt-0.5 text-xs font-semibold text-amber-900">▲ {warning}</p>}
     </div>
   );
 }
 
-export function OpsSection({ siteId, ops, capacityMw }: { siteId: string; ops: SiteOps; capacityMw: number }) {
+export function OpsSection({ siteId, ops, capacityMw, simulated = false }: { siteId: string; ops: SiteOps; capacityMw: number; simulated?: boolean }) {
   const latestMw = ops.latestScada.reduce((sum, row) => sum + row.mw, 0);
-  const latestAt = ops.latestScada[0]?.settlement_date ?? null;
+  const latestAt = ops.latestScada.length ? new Date(Math.min(...ops.latestScada.map((row) => new Date(row.settlement_date).getTime()))) : null;
+  const stale =
+    ops.latestFreshness.status === "stale" ? `Stale: no SCADA for ${formatAge(ops.latestFreshness.ageHours)} (limit 2 h)` : undefined;
   const totalIntervals = ops.origins.reduce((sum, row) => sum + row.intervals, 0);
   const selfIntervals = ops.origins.filter((row) => row.category === "self").reduce((sum, row) => sum + row.intervals, 0);
   const curtailment = ops.curtailment;
@@ -34,7 +38,10 @@ export function OpsSection({ siteId, ops, capacityMw }: { siteId: string; ops: S
           <h2 id="ops-heading" className="text-lg font-semibold">
             Operations
           </h2>
-          <p className="text-sm text-slate-600">Public AEMO NEMWeb data for {ops.duids.join(", ")}. Trading day {ops.day ?? "—"} (04:05 → 04:00 NEM time).</p>
+          <p className="text-sm text-slate-600">
+            {simulated ? "Simulated data, in the shape of AEMO's NEMWeb tables," : "Public AEMO NEMWeb data"} for {ops.duids.join(", ")}. Trading day{" "}
+            {ops.day ?? "—"} (04:05 → 04:00 NEM time).
+          </p>
         </div>
         {ops.days.length > 0 && (
           <nav aria-label="Trading day" className="flex flex-wrap gap-1 text-xs">
@@ -57,7 +64,7 @@ export function OpsSection({ siteId, ops, capacityMw }: { siteId: string; ops: S
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Latest actual" value={latestAt ? formatMw(latestMw) : "—"} note={latestAt ? formatNemTime(latestAt) : "No SCADA yet"} />
+        <Stat label="Latest actual" value={latestAt ? formatMw(latestMw) : "—"} note={latestAt ? formatNemTime(latestAt) : "No SCADA yet"} warning={stale} />
         <Stat label="Energy dispatched" value={curtailment ? `${curtailment.clearedMwh.toFixed(0)} MWh` : "—"} note="Σ dispatch target × 5 min" />
         <Stat
           label="Curtailment (estimate)"

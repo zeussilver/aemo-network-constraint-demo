@@ -89,6 +89,16 @@ export function assessFreshness(latest: Date | null, maxAgeHours: number, now: D
   return { status: ageHours <= maxAgeHours ? "ok" : "stale", ageHours };
 }
 
+/**
+ * One site's SCADA freshness, against the same limit as the fleet-wide check. The fleet
+ * check looks at the newest reading across every site, so a single site that stops
+ * reporting never trips it; this is the per-site view of the same rule. For a site with
+ * several units, pass the oldest of their latest readings (null if any unit has none).
+ */
+export function siteScadaFreshness(latest: Date | null, now: Date): Freshness {
+  return assessFreshness(latest, FRESHNESS_LIMITS_HOURS.scada, now);
+}
+
 export type ForecastWindow = { endsAt: Date; ended: boolean };
 
 /**

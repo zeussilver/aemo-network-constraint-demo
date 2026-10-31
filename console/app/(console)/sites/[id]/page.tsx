@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { formatStaffTime, titleCase } from "@/lib/format";
 import { notFoundOnMissing } from "@/lib/page-guards";
 import { can } from "@/lib/rbac";
+import { isSandbox } from "@/lib/sandbox";
 import { param } from "@/lib/search-params";
 import { getSiteOps } from "@/lib/services/ops";
 import { getSite, listUnassignedRegistryUnits } from "@/lib/services/sites";
@@ -126,7 +127,7 @@ export default async function SitePage({ params, searchParams }: PageProps<"/sit
           </p>
         </Card>
       </div>
-      {ops && <OpsSection siteId={site.id} ops={ops} capacityMw={site.registeredCapacityMw} />}
+      {ops && <OpsSection siteId={site.id} ops={ops} capacityMw={site.registeredCapacityMw} simulated={isSandbox()} />}
     </>
   );
 }
