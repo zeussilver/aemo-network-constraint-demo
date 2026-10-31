@@ -16,7 +16,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "e2e:prepare": "tsx e2e/prepare.ts",
+    "e2e:prepare": "tsx e2e/prepare.ts && tsx e2e/prepare-sandbox.ts",
     "test:e2e": "npm run e2e:prepare && playwright test",
     "postbuild": "cp -R .next/static .next/standalone/.next/"
   },

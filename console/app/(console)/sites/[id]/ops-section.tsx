@@ -22,7 +22,7 @@ function Stat({ label, value, note, warning }: { label: string; value: string; n
   );
 }
 
-export function OpsSection({ siteId, ops, capacityMw }: { siteId: string; ops: SiteOps; capacityMw: number }) {
+export function OpsSection({ siteId, ops, capacityMw, simulated = false }: { siteId: string; ops: SiteOps; capacityMw: number; simulated?: boolean }) {
   const latestMw = ops.latestScada.reduce((sum, row) => sum + row.mw, 0);
   const latestAt = ops.latestScada.length ? new Date(Math.min(...ops.latestScada.map((row) => new Date(row.settlement_date).getTime()))) : null;
   const stale =
@@ -38,7 +38,10 @@ export function OpsSection({ siteId, ops, capacityMw }: { siteId: string; ops: S
           <h2 id="ops-heading" className="text-lg font-semibold">
             Operations
           </h2>
-          <p className="text-sm text-slate-600">Public AEMO NEMWeb data for {ops.duids.join(", ")}. Trading day {ops.day ?? "—"} (04:05 → 04:00 NEM time).</p>
+          <p className="text-sm text-slate-600">
+            {simulated ? "Simulated data, in the shape of AEMO's NEMWeb tables," : "Public AEMO NEMWeb data"} for {ops.duids.join(", ")}. Trading day{" "}
+            {ops.day ?? "—"} (04:05 → 04:00 NEM time).
+          </p>
         </div>
         {ops.days.length > 0 && (
           <nav aria-label="Trading day" className="flex flex-wrap gap-1 text-xs">

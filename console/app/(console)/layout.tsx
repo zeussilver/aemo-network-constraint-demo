@@ -2,16 +2,19 @@ import { NavLinks } from "@/components/nav";
 import { Badge } from "@/components/ui";
 import { requireActor } from "@/lib/dal";
 import { can } from "@/lib/rbac";
+import { isSandbox } from "@/lib/sandbox";
 import { signOut } from "./actions";
 
 export default async function ConsoleLayout({ children }: LayoutProps<"/">) {
   const actor = await requireActor();
+  const sandbox = isSandbox();
   const items = [
     { href: "/", label: "Overview" },
     { href: "/sites", label: "Sites" },
     { href: "/customers", label: "Customers" },
     { href: "/status", label: "Data status" },
     ...(can(actor.role, "audit:read") ? [{ href: "/audit", label: "Audit log" }] : []),
+    ...(sandbox ? [{ href: "/training", label: "Training" }] : []),
   ];
   return (
     <div className="flex min-h-screen">
@@ -36,7 +39,15 @@ export default async function ConsoleLayout({ children }: LayoutProps<"/">) {
           </form>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-6 py-6">{children}</main>
+      <main className="min-w-0 flex-1 px-6 py-6">
+        {sandbox && (
+          <p role="note" aria-label="Sandbox" className="mb-4 rounded-md border border-violet-300 bg-violet-50 px-3 py-2 text-sm text-violet-900">
+            <span className="font-semibold">Sandbox.</span> Every farm, customer and number here is simulated for testing and training; none
+            of it is a real plant or real market data.
+          </p>
+        )}
+        {children}
+      </main>
     </div>
   );
 }
