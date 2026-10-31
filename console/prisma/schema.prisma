@@ -243,6 +243,27 @@ model IngestedFile {
   @@map("ingested_file")
 }
 
+// ---------------------------------------------------------------------------------
+// Sandbox: written only by the simulator (src/aemo_constraint_demo/sim_sandbox.py),
+// which refuses any database whose name does not end in _sandbox or _e2e.
+// ---------------------------------------------------------------------------------
+
+/// One row per sandbox load: the world, seed and anchor time the simulated data was
+/// generated for, and the scenario manifest (including training answers) the Training
+/// page reads. Answers never leave the server.
+
+model SimRun {
+  id           Int      @id @default(autoincrement())
+  world        String
+  seed         Int
+  anchor       DateTime @db.Timestamptz(3)
+  referenceDay DateTime @map("reference_day") @db.Date
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  manifest     Json
+
+  @@map("sim_run")
+}
+
 model User {
   id            String    @id
   name          String
