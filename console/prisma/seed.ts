@@ -80,6 +80,12 @@ async function seedStaffUsers(prisma: ReturnType<typeof createPrismaClient>): Pr
 async function main() {
   const prisma = createPrismaClient();
   try {
+    // A sandbox database gets its sites from the simulator (sim_sandbox.py), so it only
+    // needs the staff accounts.
+    if (process.env.SEED_SCOPE === "staff") {
+      console.log(`Seeded ${await seedStaffUsers(prisma)} staff users (SEED_SCOPE=staff).`);
+      return;
+    }
     const registry = parseCsv(readFileSync(REGISTRY_CSV, "utf8"));
     for (const row of registry) {
       const data = {
