@@ -1,4 +1,4 @@
-import { assessFreshness, forecastWindow, FRESHNESS_LIMITS_HOURS, originCategory, summariseCurtailment, tradingDayBounds, tradingDayOf, type Freshness, type OriginCategory, type SourceName } from "../ops-math";
+import { assessFreshness, forecastWindow, FRESHNESS_LIMITS_HOURS, originCategory, siteScadaFreshness, summariseCurtailment, tradingDayBounds, tradingDayOf, type Freshness, type OriginCategory, type SourceName } from "../ops-math";
 import { assertCan } from "./audit";
 import { NotFoundError, type Actor, type Db } from "./types";
 
@@ -95,6 +95,7 @@ export async function getFleetOverview(db: Db, actor: Actor, now = new Date()) {
         .filter((row) => originCategory(row.origin) === "self")
         .reduce((sum, row) => sum + row._count._all, 0);
       const snapshot = siteDuids.map((duid) => snapshotBy.get(duid)).find(Boolean) ?? null;
+      const latestAt = latest.length ? new Date(Math.min(...latest.map((row) => row.settlement_date.getTime()))) : null;
       return {
         id: site.id,
         name: site.name,
@@ -104,7 +105,8 @@ export async function getFleetOverview(db: Db, actor: Actor, now = new Date()) {
         customer: site.customer,
         duids: siteDuids,
         latestMw: latest.length ? latest.reduce((sum, row) => sum + row.mw, 0) : null,
-        latestAt: latest.length ? new Date(Math.min(...latest.map((row) => row.settlement_date.getTime()))) : null,
+        latestAt,
+        latestFreshness: siteScadaFreshness(latest.length === siteDuids.length ? latestAt : null, now),
         curtailment: summariseCurtailment(dispatch.filter((row) => siteDuids.includes(row.duid))),
         selfForecastShare: usedTotal ? usedSelf / usedTotal : null,
         snapshot: snapshot ? { ...snapshot, window: forecastWindow(snapshot.as_of, snapshot.horizon_hours, now) } : null,
@@ -143,7 +145,12 @@ export async function getSiteOps(db: Db, actor: Actor, siteId: string, requested
     db.forecastSnapshot.findFirst({ where: { duid: { in: duids } }, orderBy: { asOf: "desc" } }),
   ]);
   const snapshotWindow = snapshot ? forecastWindow(snapshot.asOf, snapshot.horizonHours, now) : null;
-  if (!day) return { day: null, days, duids, latestScada, snapshot, snapshotWindow, points: [], curtailment: null, origins: [], suppression: [] };
+  // A unit that never reported counts as missing, so the site is only as fresh as its stalest unit.
+  const latestAt =
+    latestScada.length === duids.length ? new Date(Math.min(...latestScada.map((row) => row.settlement_date.getTime()))) : null;
+  const latestFreshness = siteScadaFreshness(latestAt, now);
+  if (!day)
+    return { day: null, days, duids, latestScada, latestFreshness, snapshot, snapshotWindow, points: [], curtailment: null, origins: [], suppression: [] };
 
   const { after, until } = tradingDayBounds(day);
   const window = { duid: { in: duids }, settlementDate: { gt: after, lte: until } };
@@ -192,6 +199,7 @@ export async function getSiteOps(db: Db, actor: Actor, siteId: string, requested
     days,
     duids,
     latestScada,
+    latestFreshness,
     snapshot,
     snapshotWindow,
     points: [...points.values()].sort((a, b) => a.t.localeCompare(b.t)),

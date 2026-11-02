@@ -19,6 +19,14 @@ test("the fleet overview and a site's ops view render the loaded data", async ({
   await expect(page.getByText("No constraint-risk model")).toHaveCount(0);
 });
 
+test("the Training page exists only in the sandbox", async ({ page }) => {
+  await signIn(page, "viewer");
+  await expect(page.getByRole("link", { name: "Training" })).toHaveCount(0);
+  await expect(page.getByRole("note", { name: "Sandbox" })).toHaveCount(0);
+  const response = await page.goto("/training");
+  expect(response?.status()).toBe(404);
+});
+
 test("health and readiness endpoints answer without a session", async ({ request }) => {
   const health = await request.get("/api/health");
   expect(health.status()).toBe(200);

@@ -1,0 +1,161 @@
+# Training sandbox: five simulated farms and four scenarios a new staff member can work
+# through on the console's Training page. Farms, customers and DUIDs are invented; the
+# behaviour is calibrated on real NEMWeb data (artifacts/sim_calibration.json).
+#
+# Events are placed relative to the time the sandbox is loaded: `day = 0` is the latest
+# trading day AEMO has published Next Day files for, `hours_before_anchor` counts back from
+# the load time. See src/aemo_constraint_demo/sim_scenarios.py.
+
+name = "training"
+title = "Training sandbox"
+seed = 20261103
+history_days = 3
+# Half the calibrated rate of background cap episodes (spring 2026 had caps in about 30%
+# of intervals), so the scripted constraint stands out.
+cap_rate_scale = 0.5
+
+[[sites]]
+key = "wind-a"
+duid = "SIMWDA1"
+name = "Sim Wind Farm A"
+fuel = "WIND"
+region = "SA1"
+capacity_mw = 120
+customer = "Simulated Customer South"
+participant = "SIMWINDA"
+
+[[sites]]
+key = "solar-b"
+duid = "SIMSLB1"
+name = "Sim Solar Farm B"
+fuel = "SOLAR"
+region = "NSW1"
+capacity_mw = 150
+customer = "Simulated Customer North"
+participant = "SIMSOLB"
+
+[[sites]]
+key = "solar-c"
+duid = "SIMSLC1"
+name = "Sim Solar Farm C"
+fuel = "SOLAR"
+region = "QLD1"
+capacity_mw = 100
+customer = "Simulated Customer North"
+participant = "SIMSOLC"
+
+[[sites]]
+key = "wind-d"
+duid = "SIMWDD1"
+name = "Sim Wind Farm D"
+fuel = "WIND"
+region = "VIC1"
+capacity_mw = 200
+customer = "Simulated Customer South"
+# No `participant`: AEMO's AWEFS forecasts this farm.
+
+[[sites]]
+key = "solar-e"
+duid = "SIMSLE1"
+name = "Sim Solar Farm E"
+fuel = "SOLAR"
+region = "QLD1"
+capacity_mw = 80
+customer = "Simulated Customer North"
+
+[[scenarios]]
+key = "network-constraint"
+title = "A network constraint holds a wind farm back"
+description = """
+A strong-wind day in South Australia. From 09:00 a network constraint holds Sim Wind Farm A
+at 5% of its capacity for ten hours, so most of what it could have generated is curtailed.
+"""
+[[scenarios.events]]
+kind = "weather"
+site = "wind-a"
+day = 0
+weather = "windy"
+[[scenarios.events]]
+kind = "cap"
+site = "wind-a"
+day = 0
+start = "09:00"
+hours = 10
+limit_share = 0.05
+[scenarios.task]
+kind = "largest_curtailment"
+prompt = "On trading day {day}, which site had the largest curtailment estimate, and about how many MWh was it?"
+explanation = """
+The overview's curtailment column covers the latest published trading day. On the site page the
+capped intervals are shaded: the dispatch target sits far below the available output for about
+ten hours. The estimate counts only capped intervals, and it cannot tell network constraints from
+economic curtailment.
+"""
+
+[[scenarios]]
+key = "scada-outage"
+title = "A farm stops sending SCADA"
+description = """
+Sim Solar Farm B's SCADA readings stop arriving three hours before the sandbox was loaded. The
+other farms keep reporting, so the fleet-wide SCADA freshness stays green.
+"""
+[[scenarios.events]]
+kind = "scada_outage"
+site = "solar-b"
+hours_before_anchor = 3
+[scenarios.task]
+kind = "scada_outage"
+prompt = "One site's SCADA feed has stopped. Which site is it, and when was its last reading?"
+explanation = """
+The data-freshness strip is fleet-wide: it shows the newest SCADA reading across all sites, so one
+silent site does not turn it amber. The site's own latest reading carries a Stale badge in the
+overview and on the site page once it is older than the two-hour SCADA limit.
+"""
+
+[[scenarios]]
+key = "self-forecast-suppressed"
+title = "AEMO stops using a farm's self-forecast"
+description = """
+On a clear day AEMO suppresses every self-forecast submission from Sim Solar Farm C between 07:00
+and 16:00, so dispatch falls back to AEMO's own ASEFS forecast.
+"""
+[[scenarios.events]]
+kind = "weather"
+site = "solar-c"
+day = 0
+weather = "clear"
+[[scenarios.events]]
+kind = "self_forecast_suppressed"
+site = "solar-c"
+day = 0
+start = "07:00"
+hours = 9
+[scenarios.task]
+kind = "self_forecast_suppressed"
+prompt = "On trading day {day}, dispatch stopped using one site's self-forecast for most of the day. Which site, and which forecast did dispatch use instead?"
+explanation = """
+On the site page, "Which forecast dispatch used" shows AEMO AWEFS/ASEFS for most intervals and
+"Forecast submissions and suppression" shows the self-forecast submissions suppressed by AEMO. The
+overview's self-forecast share for that site drops well below the other self-forecasting farms.
+"""
+
+[[scenarios]]
+key = "ingest-failure"
+title = "The latest SCADA load fails"
+description = """
+Ten minutes before the sandbox was loaded, the hourly SCADA load failed on a truncated NEMWeb file.
+Earlier loads succeeded, so the data is still inside its freshness limit.
+"""
+[[scenarios.events]]
+kind = "ingest_failure"
+source = "scada"
+hours_before_anchor = 0.17
+error = "PUBLIC_DISPATCHSCADA_SIMULATED.zip: BadZipFile: File is not a zip file (simulated truncated download)"
+[scenarios.task]
+kind = "ingest_failure"
+prompt = "The latest run of one data source failed, although its data is still fresh. Which source?"
+explanation = """
+Each chip in the data-freshness strip shows the age of the newest data and, separately, whether the
+last ingest run failed. The Data status page lists the run with its error. /api/ready reports 503
+while the last run of any source has failed.
+"""

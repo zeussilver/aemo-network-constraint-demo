@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessFreshness, forecastWindow, originCategory, summariseCurtailment, tradingDayBounds, tradingDayOf } from "@/lib/ops-math";
+import { assessFreshness, forecastWindow, originCategory, siteScadaFreshness, summariseCurtailment, tradingDayBounds, tradingDayOf } from "@/lib/ops-math";
 
 const nem = (local: string) => new Date(`${local}+10:00`);
 
@@ -64,5 +64,12 @@ describe("assessFreshness", () => {
     expect(assessFreshness(nem("2026-10-19T01:30:00"), 2, now)).toEqual({ status: "ok", ageHours: 1.5 });
     expect(assessFreshness(nem("2026-10-18T22:00:00"), 2, now).status).toBe("stale");
     expect(assessFreshness(null, 2, now)).toEqual({ status: "missing", ageHours: null });
+  });
+
+  it("holds one site to the fleet's two-hour SCADA limit", () => {
+    // The sandbox's SCADA-outage scenario: one farm silent for three hours while the rest report.
+    expect(siteScadaFreshness(nem("2026-10-19T00:00:00"), now)).toEqual({ status: "stale", ageHours: 3 });
+    expect(siteScadaFreshness(nem("2026-10-19T02:55:00"), now).status).toBe("ok");
+    expect(siteScadaFreshness(null, now).status).toBe("missing");
   });
 });
