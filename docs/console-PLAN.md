@@ -341,9 +341,9 @@ After the demo period it is kept or deleted. Delete = one command,
 ### 2026-10-19 — approved
 - I chose Option A (full scope). Questions 1 and 2 are answered. Questions 3–5
   stay open until C5.
-- Before merging, all 97 pytest tests passed on the PR #1 head (`a2d407e`, 4.7 s).
-- PR #1 was merged into `main` with a merge commit (`44ee888`). Its branch was kept.
-- Local `ops-console` branch created from `main` at `44ee888`. Not pushed, not checked
+- Before merging, all 97 pytest tests passed on the PR #1 head (`ee9b5c7`, 4.7 s).
+- PR #1 was merged into `main` with a merge commit (`1a7796a`). Its branch was kept.
+- Local `ops-console` branch created from `main` at `1a7796a`. Not pushed, not checked
   out yet.
 - This plan file is still untracked. It goes into the first `ops-console` commit.
 - Next: C0 on 2026-10-22, after another deadline on 10-21. Before then I sign
@@ -661,7 +661,7 @@ confirmed against Cost Management one to two days after creation.
   - App Insights also created its free "Failure Anomalies" smart-detection rule.
 - First deploy run failed at the firewall step: the current az CLI takes `--server-name`
   and `--name`, and `--rule-name` is gone. CI failed on the React hooks lint rule
-  flagging `useAzureMonitor`. Both fixed in `aaf1ec8`.
+  flagging `useAzureMonitor`. Both fixed in `ce4889c`.
   - My local lint check had piped into `tail`, which hid the exit code; checks are now
     run without pipes.
 - Deploy run 39186569586 succeeded:
@@ -712,7 +712,7 @@ NEMWeb. An hourly run fetches about 12.
   unloaded yet. A longer idle period may still unload it. That case is not measured.
 
 ### 2026-10-19 — merged to main, alert enabled, alert drill
-- PR #2 merged into `main` (merge commit `8d45fa1`) after all 6 checks passed. The repo
+- PR #2 merged into `main` (merge commit `8673035`) after all 6 checks passed. The repo
   does not allow GitHub auto-merge, so the merge was done by hand once the checks were
   green.
 - Deploy run 39194068910 from main succeeded:
@@ -788,7 +788,7 @@ NEMWeb. An hourly run fetches about 12.
   "hourly" was updated in the README, the overview footnote and the Bicep description. If
   scheduled runs still do not start, the fallback is an Azure-side timer that calls
   `workflow_dispatch`.
-- After PR #3 merged (`609a6db`, 07:02 UTC; deploy 39213461955 and CI green; the
+- After PR #3 merged (`b309486`, 07:02 UTC; deploy 39213461955 and CI green; the
   post-deploy ingest loaded 28 SCADA files), the 07:07 and 07:37 slots also produced no
   `schedule` run. That makes 5 missed slots across two cron strings.
 - Repo checks: Actions enabled with all actions allowed; `production` environment has no
@@ -879,7 +879,7 @@ If the free grant does apply, execution cost is $0. The spending limit stays On.
   Manual dispatch at 16:33 UTC bridges until the function is deployed.
 
 ### 2026-10-19 — function deployed, first timer run
-- PR #4 merged at 16:43:16 UTC (merge commit `5ae1555`) after all 6 checks passed. CI run
+- PR #4 merged at 16:43:16 UTC (merge commit `dd3ef75`) after all 6 checks passed. CI run
   39287811049: pytest 125, Vitest 46, Playwright 8, runtime audit 0 vulnerabilities.
 - Deploy run 39287810990 took 8 min 44 s from push to the function registered:
   - build 1 min 5 s;
