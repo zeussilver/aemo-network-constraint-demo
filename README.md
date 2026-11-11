@@ -114,8 +114,6 @@ assuming its free grant does not cover this subscription).
 Run it locally: [console/README.md](console/README.md). Deploy it: `infra/deploy.sh`, then
 push.
 
-<!-- ### Decisions: written by the repository author; uncomment the heading when it has content. -->
-
 ---
 
 ## Sandbox simulator

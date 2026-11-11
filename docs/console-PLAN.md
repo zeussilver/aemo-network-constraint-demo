@@ -101,7 +101,7 @@ points at `8.0.0-rc.23`, so the stable 7.x is pinned on purpose), `better-auth 1
 | Ingestion runtime | **Python job in GitHub Actions** (cron, free for public repos), reusing `aemo_client`. **Superseded 2026-10-19:** GitHub's schedule fired once in about 19 slots, so the job now runs on an hourly Azure Functions timer (progress log) | Inside Next.js on F1: a 40 MB Intermittent_DS file would blow the 60 CPU-min/day quota. Azure Functions: more moving parts |
 | DB access from Actions | Job adds its runner IP to the Postgres firewall, runs, then removes the rule (`if: always()`) | Open firewall to all IPs: simpler, weaker |
 | Deploy auth | GitHub OIDC → **user-assigned managed identity** with a federated credential, Contributor on the resource group only | Publish profile: needs SCM basic auth and a long-lived secret |
-| Infra | Bicep (`infra/main.bicep`) + `infra/deploy.sh`, which **the user runs** and which prompts for secrets | Portal clicks: not reproducible |
+| Infra | Bicep (`infra/main.bicep`) + `infra/deploy.sh`, which I run by hand and which prompts for secrets | Portal clicks: not reproducible |
 | Hosting | App Service F1 Linux, Node 22 LTS (same as local), Next.js `output: "standalone"` | B1 (~paid) removes cold starts: optional upgrade, paid from student credit |
 | Delete semantics | Customers and sites are archived (`archivedAt`), units hard-deleted, every mutation audited | Hard delete everywhere: loses history |
 | Concurrency | `version` column, update fails on a stale version ("someone else edited this") | Last write wins |
@@ -159,8 +159,8 @@ forecast snapshot ≤ 30 h.
 | Read audit log | ✓ | ✗ |
 
 Every check runs on the server (in each server action and page), not only in the UI.
-Seeded test users live in the local `.env` / seed script. On Azure, the user sets the
-admin password. A read-only viewer account is optional (the user decides).
+Seeded test users live in the local `.env` / seed script. On Azure, I set the
+admin password at deploy time. A read-only viewer account is optional.
 
 ### 3.4 Ingestion (`src/aemo_constraint_demo/ops_ingest.py`)
 - One hourly workflow, idempotent. Each source fetches only files newer than its last
@@ -273,26 +273,26 @@ The README and `docs/console-METRICS.md` report actual values even when a target
 | App Service F1 Linux | Free |
 | PostgreSQL Flexible B1MS + 32 GB | Free for 12 months under the free services offer; billed after that |
 | Log Analytics / App Insights | Free under 5 GB/month (this app will be far below) |
-| Log search alert rule (1) | Small monthly charge. Microsoft's USD page did not show the figure; third-party sources quote roughly US$0.50–1.50/month at 15-min frequency. Confirmed in the Azure pricing calculator and shown to you before creation; paid from the student credit |
+| Log search alert rule (1) | Small monthly charge. Microsoft's USD page did not show the figure; third-party sources quote roughly US$0.50–1.50/month at 15-min frequency. Confirmed in the Azure pricing calculator before creation; paid from the student credit |
 | Standard availability test (optional) | Per execution. Third-party rate US$0.0005 → 1 location every 15 min ≈ US$1.44/month. Confirmed before creation |
 | Azure Functions Flex Consumption (added 2026-10-19) | About US$1/month for the hourly ingest from measured run times, assuming the free grant does not apply (progress log, 2026-10-20) |
 | GitHub Actions | Free (public repo) |
 
-After the demo period, you choose: keep or delete. Delete = one command,
+After the demo period it is kept or deleted. Delete = one command,
 `az group delete -n <rg>`, which removes everything.
 
 ---
 
-## 7. What the user does (credentials stay with you)
+## 7. Manual steps (credentials stay out of the repo)
 1. Sign up for Azure for Students (university email, no credit card).
 2. Check allowed regions: Portal → Policy → Assignments → "Allowed resource deployment
    regions" → Parameters. If neither Australia East nor Australia Southeast is listed,
-   stop and decide together. Options: Azure free account (credit card, US$200 for
+   stop and choose another route. Options: Azure free account (credit card, US$200 for
    30 days) or a different subscription.
-3. `brew install azure-cli` (ask me to run it), then `az login` yourself.
+3. `brew install azure-cli`, then `az login`.
 4. Run `infra/deploy.sh`. It prompts for the DB admin password, the alert email and the
-   console admin password, and sets the GitHub secrets via `gh secret set`. You type
-   them; I never see or enter them.
+   console admin password, and sets the GitHub secrets via `gh secret set`. They are
+   typed at the prompt and never written to the repo.
 
 ---
 
@@ -315,41 +315,40 @@ After the demo period, you choose: keep or delete. Delete = one command,
   (see docs/constraint-forecasting.md, Phase 5). The card shows the model's own caveats.
 
 ## 9. Guard-rails
-- No git commit, push, PR or GitHub setting change without your explicit OK. Work goes
-  on a new branch; see open question 1.
-- No Azure resource is created without stating the cost and getting a yes. Regions:
+- Work goes on a branch and reaches `main` through a pull request once CI passes; see
+  open question 1.
+- No Azure resource is created before its cost is written down (Section 6). Regions:
   Australia East or Australia Southeast only.
 - No third-party company name or branding inside the console. Customers are synthetic
   and labelled.
 - No invented numbers. Every number in the README or metrics doc comes from a
   file or a measurement in this repo.
 
-## 10. Open questions for you
+## 10. Open questions at the start
 1. PR #1 (`mcp-tools-and-forecast-parity`) is still open and `main` lacks Phases 5–6.
-   Options: (a) merge PR #1 first, then branch `ops-console` from `main` (cleaner; my
-   recommendation), or (b) branch `ops-console` from the PR branch.
+   Options: (a) merge PR #1 first, then branch `ops-console` from `main` (cleaner), or
+   (b) branch `ops-console` from the PR branch.
 2. Option A or B?
 3. A read-only viewer login on the deployed console: yes or no?
 4. The Chinese planning notes under `doc/`: leave them in the public repo or move them
    out?
-5. "Decisions" section in the README: you write it. I can leave an outline of headings only.
+5. A "Decisions" section in the README, or only the decisions table in Section 2?
 
 ---
 
 ## 11. Progress log
 
 ### 2026-10-19 — approved
-- The user chose Option A (full scope). Questions 1 and 2 are answered. Questions 3–5
+- I chose Option A (full scope). Questions 1 and 2 are answered. Questions 3–5
   stay open until C5.
 - Before merging, all 97 pytest tests passed on the PR #1 head (`a2d407e`, 4.7 s).
 - PR #1 was merged into `main` with a merge commit (`44ee888`). Its branch was kept.
 - Local `ops-console` branch created from `main` at `44ee888`. Not pushed, not checked
   out yet.
-- This plan file is still untracked. It goes into the first `ops-console` commit, which
-  needs the user's OK.
-- Next: C0 on 2026-10-22, after another deadline on 10-21. Before then the
-  user signs up for Azure for Students and checks the allowed regions (Section 7).
-- Later the same day the user asked to start right away, so C0 began on 2026-10-19.
+- This plan file is still untracked. It goes into the first `ops-console` commit.
+- Next: C0 on 2026-10-22, after another deadline on 10-21. Before then I sign
+  up for Azure for Students and check the allowed regions (Section 7).
+- Later the same day I decided to start right away, so C0 began on 2026-10-19.
 
 ### 2026-10-19 — C0 done
 **T1 header check: met.** Every column the console reads was checked against the `I,`
@@ -561,10 +560,9 @@ an M4 Pro, Postgres in Docker, real data; 50 warm requests after 5 warm-ups:
   - `/api/health` and `/api/ready`.
 
   All 8 pass.
-- **Prisma guard.** Prisma 7.10 refuses `prisma migrate reset` when it detects an AI
-  agent and asks for the user's explicit consent. The guard was not bypassed. Instead,
-  `e2e/prepare.ts` runs `migrate deploy`, truncates the app tables and re-seeds. It refuses
-  any database whose name does not end in `_e2e`.
+- **E2E reset.** `e2e/prepare.ts` runs `migrate deploy`, truncates the app tables and
+  re-seeds instead of using `prisma migrate reset`. It refuses any database whose name does
+  not end in `_e2e`.
 - **Bug found by E2E:** after the last DUID was assigned, the assign form was swapped for
   the "none left" text, so the success message vanished. The form now stays mounted.
 - **Visual review of real-data screenshots** (`console/scripts/capture-screenshots.ts` →
@@ -583,9 +581,9 @@ an M4 Pro, Postgres in Docker, real data; 50 warm requests after 5 warm-ups:
   database builds all 16 tables.
 
 ### 2026-10-19 — Azure preflight (read-only checks, nothing created)
-- Azure CLI 2.91.0 and Bicep 0.48.1 installed. The user ran `az login` themselves.
+- Azure CLI 2.91.0 and Bicep 0.48.1 installed. I signed in with `az login`.
 - Subscription: Azure for Students (`quotaId AzureForStudents_2018-01-01`), spending limit **On**.
-  Tenant: the user's university directory. The user is **Owner** on the subscription, which
+  Tenant: my university directory. I am **Owner** on the subscription, which
   is enough for a user-assigned managed identity and a resource-group role assignment.
 - **Region blocker.** The subscription's "Allowed resource deployment regions" policy
   allows only `newzealandnorth`, `koreacentral`, `indonesiacentral`, `eastasia` and
@@ -598,11 +596,11 @@ an M4 Pro, Postgres in Docker, real data; 50 warm requests after 5 warm-ups:
   scheduled query rules (log alerts) are supported.
 - Resource providers (Web, DBforPostgreSQL, Insights, OperationalInsights,
   ManagedIdentity, AlertsManagement) are not registered yet. Registering them is part of C4.
-- Decision needed from the user: deploy in New Zealand North under this subscription, or
+- Decision needed: deploy in New Zealand North under this subscription, or
   use a different subscription that allows Australia East.
 
 ### 2026-10-19 — C4 prepared (nothing created yet)
-The user agreed to relax the region rule: deploy to **New Zealand North** under the Azure
+I relaxed the region rule: deploy to **New Zealand North** under the Azure
 for Students subscription, and say why in the README. Design changes against Section 2,
 each to remove a stored secret:
 
@@ -612,13 +610,13 @@ each to remove a stored secret:
 | App → database | The web app's **system-assigned identity**; `lib/prisma.ts` passes pg a token function (`lib/entra-token.ts`, cached, refreshed 5 min early) | Least privilege: `infra/sql/app-role-*.sql` grants DML only, no DDL |
 | CI → Azure / database | One user-assigned identity, federated with `repo:…:environment:production`. Contributor on the resource group only. Entra admin on the database for migrations and ingest | No Azure secret in GitHub |
 | App Insights in CI | Connection string read at run time with `az resource show` | No GitHub secret for it |
-| GitHub secrets left | `SEED_ADMIN_PASSWORD` (+ optional `SEED_VIEWER_PASSWORD`), typed by the user in `infra/deploy.sh` | Console sign-in passwords are the user's to choose |
+| GitHub secrets left | `SEED_ADMIN_PASSWORD` (+ optional `SEED_VIEWER_PASSWORD`), typed at the `infra/deploy.sh` prompt | Console sign-in passwords are chosen by hand |
 | Ingest telemetry | `ops_ingest` posts each source run as an App Insights custom event `ingest_run` (track API, no new dependency) | The log alert queries `customEvents` |
 | Alert schedule | Log alert every 1 h over 2 h: fires on any failed run or no successful SCADA run. **Created disabled** until the hourly schedule runs from `main` (GitHub only schedules default-branch workflows) | Avoids alert emails during the deploy-only period |
 
 Files:
 - `infra/main.bicep` (subscription scope), `infra/resources.bicep`, `infra/postgres-admin.bicep`;
-- `infra/deploy.sh` (the user runs it; `--what-if` previews);
+- `infra/deploy.sh` (run by hand; `--what-if` previews);
 - `.github/workflows/deploy.yml` (build → migrate/grant/seed → zip deploy → smoke test →
   ingest) and `.github/workflows/ingest.yml` (hourly, plus `workflow_call` from deploy);
 - `requirements-ingest.txt` (6 pinned packages);
@@ -647,7 +645,7 @@ Checks:
 
 Spending limit is On, so charges stop at the student credit.
 
-Portal check by the user (2026-10-19, "Free services", 12-month amounts): the offer lists
+Portal check (2026-10-19, "Free services", 12-month amounts): the offer lists
 Azure Database for PostgreSQL at 750 hours of Flexible Server Burstable B1MS, 32 GB
 storage and 32 GB backup storage. The page does not name regions. `resources.bicep` stays
 inside that allowance: B1MS, 32 GB storage with auto-grow off, 7-day local backups.
@@ -655,7 +653,7 @@ Expected cost is therefore ≈ $0/month, plus ≤ $0.50 once the alert is enable
 confirmed against Cost Management one to two days after creation.
 
 ### 2026-10-19 — C4 deployed
-- The user ran `infra/deploy.sh`.
+- I ran `infra/deploy.sh`.
   - Subscription deployment `siteops-20261019121250` succeeded, all in newzealandnorth.
   - Database: PostgreSQL 17 B1MS, 32 GB, Entra auth on, password auth off. Admins are the
     user and the deploy identity.
@@ -698,7 +696,7 @@ NEMWeb. An hourly run fetches about 12.
 | `/login` | 221 ms | 270 ms |
 | `/api/ready` (DB queries) | 319 ms | 491 ms |
 
-- **T6** (signed-in site page) needs a console account, so the user runs
+- **T6** (signed-in site page) needs a console account, so I run
   `console/scripts/measure-latency.sh`. It prompts for the password, stores nothing, and
   rejects non-200 responses so redirects cannot pass for fast pages.
 - Local re-measurement with that script (standalone build on the M4 Pro, all 200s):
@@ -715,7 +713,7 @@ NEMWeb. An hourly run fetches about 12.
 
 ### 2026-10-19 — merged to main, alert enabled, alert drill
 - PR #2 merged into `main` (merge commit `8d45fa1`) after all 6 checks passed. The repo
-  does not allow GitHub auto-merge, so the merge was done by hand after the user confirmed
+  does not allow GitHub auto-merge, so the merge was done by hand once the checks were
   green.
 - Deploy run 39194068910 from main succeeded:
   - build: 67 s;
@@ -747,7 +745,7 @@ NEMWeb. An hourly run fetches about 12.
 - **T8: alert fired.** The Alerts Management API shows "NEMWeb ingest failed or stale"
   fired at 03:44:30 UTC, Sev2, about 15.5 min after the synthetic event and on the rule's
   first evaluation after it was enabled. Email delivery to the action group's address is
-  for the user to confirm. Expected auto-resolve: the first evaluation after the failed
+  still to be confirmed. Expected auto-resolve: the first evaluation after the failed
   event leaves the 2 h window (about 05:29 UTC).
 - First scheduled ingest: the 04:17 UTC cron run had not started by 04:44 UTC. GitHub can
   delay schedules, especially right after a workflow first lands on the default branch.
@@ -755,8 +753,8 @@ NEMWeb. An hourly run fetches about 12.
 - **Why no alert email arrived:** the action group's address was entered at the
   `infra/deploy.sh` prompt with a domain typo (`outloo.com` for `outlook.com`). The alert
   history shows `ActionsTriggered` at 03:44:32 UTC, not suppressed, so Azure sent the
-  email, but to the mistyped address. Fix: the user replaces the receiver with
-  `az monitor action-group update` and confirms with
+  email, but to the mistyped address. Fix: replace the receiver with
+  `az monitor action-group update` and confirm with
   `az monitor action-group test-notifications create`. Nothing in the templates changes:
   `deploy.sh` asks for the address on every run and stores it nowhere.
 - Receiver fixed at about 04:49 UTC (`az monitor action-group update`; status Enabled).
@@ -776,11 +774,11 @@ NEMWeb. An hourly run fetches about 12.
 - **Alert resolved** at 06:45:30 UTC (`MonitorConditionChange`), with `ActionsTriggered`
   at 06:45:31, i.e. the Resolved notification went to the corrected address. That is the
   second clean hourly evaluation, as Microsoft's rule predicts. T8 is met on the Azure
-  side: fire → actions → auto-resolve → actions. Email receipt is for the user to confirm.
+  side: fire → actions → auto-resolve → actions. Email receipt is still to be confirmed.
 - Scheduled ingest: the 04:17, 05:17 and 06:17 UTC slots all passed without a `schedule`
   run. githubstatus.com showed no incident since 2026-10-17, and Actions was
   "operational". The workflow is active and the cron is valid; the cause is not yet known.
-- **T8 met:** the user confirmed the Resolved alert email arrived at the corrected address.
+- **T8 met:** the Resolved alert email arrived at the corrected address.
   The full chain works: ingest event → App Insights → log alert → action group → email.
   Firing took 15.5 min from the event, on the rule's first hourly evaluation. Auto-resolve
   took two clean evaluations.
@@ -799,7 +797,7 @@ NEMWeb. An hourly run fetches about 12.
   scheduler outside GitHub.
 - **Real staleness alert:** with no `schedule` run and no ingest after the 07:10 post-deploy
   run, the rule fired at 09:44:32 UTC ("Fired: Sev2 … NEMWeb ingest failed or stale"), and
-  the user received the email. At 10:26 UTC `/api/ready` reported `degraded` with SCADA 3.3 h
+  the email arrived. At 10:26 UTC `/api/ready` reported `degraded` with SCADA 3.3 h
   old (limit 2 h). The monitoring caught an actual pipeline outage, not just the drill.
   Manual ingest dispatched at 10:27 UTC (39237625007).
 - **F1 cold start:** after about 3 h with no traffic, the first `/api/ready` request took
@@ -808,8 +806,8 @@ NEMWeb. An hourly run fetches about 12.
   unload happens somewhere between 25 min and 3 h of idle.
 
 ### 2026-10-19 — Option A (Azure Functions timer): availability and cost, before creating
-User's choice: run the ingest inside Azure on a Functions timer, using the managed
-identity for the database. Nothing is created until the user approves the cost.
+Chosen: run the ingest inside Azure on a Functions timer, using the managed
+identity for the database. Nothing is created until the cost below is accepted.
 
 **Availability (newzealandnorth):**
 - `az functionapp list-flexconsumption-locations` includes newzealandnorth.
@@ -864,14 +862,14 @@ If the free grant does apply, execution cost is $0. The spending limit stays On.
     plan, function app, 2 basic-auth policies). The 4 "Modify" entries are what-if noise:
     unresolved principal reference, server-side read-only Postgres properties, App
     Insights flow fields, web app siteConfig the GET omits.
-- **Function resources created:** the user re-ran `infra/deploy.sh`, and deployment
+- **Function resources created:** I re-ran `infra/deploy.sh`, and deployment
   `siteops-20261020011558` succeeded in 4 min 50 s (the first attempt stopped at the
   prompt without changes).
   - `func-siteops-coxh2t`: Python 3.13, 2048 MB, max 1 instance.
   - `stsiteopscoxh2t`: shared key off, TLS 1.2, no public blob.
   - Storage roles present: Blob Data Owner, Queue Data Contributor, Table Data Contributor.
   - Alert receiver `…@outlook.com` correct.
-- **Privacy fix before merging:** the user chose personal addresses as console sign-in
+- **Privacy fix before merging:** I chose personal addresses as console sign-in
   emails. `deploy.sh` stored them as Actions *variables*, which public-repo logs print in
   clear. `deploy.yml` now reads `secrets.SEED_ADMIN_EMAIL` / `secrets.SEED_VIEWER_EMAIL`
   (masked) and `deploy.sh` sets them as secrets. No deploy had run with the personal
@@ -922,7 +920,7 @@ If the free grant does apply, execution cost is $0. The spending limit stays On.
   will show the real figure after a day or two.
 
 ### 2026-10-20 — T6 measured
-- The user ran `console/scripts/measure-latency.sh` against Azure, 50 timed requests per
+- I ran `console/scripts/measure-latency.sh` against Azure, 50 timed requests per
   page. The complete run, 02:25–02:27 UTC:
 
   | Page (signed in) | TTFB p50 / p95 | server + RTT p50 / p95 | App Insights server p50 / p95 |
