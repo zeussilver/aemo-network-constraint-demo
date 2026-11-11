@@ -61,9 +61,9 @@ include about 4 network round trips (mean TCP connect 51 ms).
 
 | What | Value | Source |
 |---|---|---|
-| Alert drill | synthetic failed `ingest_run` at 03:28:58 UTC → alert fired 03:44:30 (first hourly evaluation) → auto-resolved 06:45:30 (two clean evaluations) → Resolved email received | Alerts Management API history; user confirmation |
+| Alert drill | synthetic failed `ingest_run` at 03:28:58 UTC → alert fired 03:44:30 (first hourly evaluation) → auto-resolved 06:45:30 (two clean evaluations) → Resolved email received | Alerts Management API history; the email itself |
 | Server-side request time (App Insights) | `/api/health` p50 5 / p95 13 ms; `/login` 11 / 19 ms; `/api/ready` 84 / 220 ms | `AppRequests`, 2026-10-19 |
-| Real stale-data alerts while GitHub's schedule was not firing (1 `schedule` run in about 19 slots) | fired 09:44:32 UTC → resolved 11:45:33; fired 12:44:30 → resolved 15:45:36 | Alerts Management API; the 09:44 Fired email confirmed by the user |
+| Real stale-data alerts while GitHub's schedule was not firing (1 `schedule` run in about 19 slots) | fired 09:44:32 UTC → resolved 11:45:33; fired 12:44:30 → resolved 15:45:36 | Alerts Management API; the 09:44 Fired email received |
 | First Azure Functions timer run, 17:12 UTC 2026-10-19 | succeeded in 8.4 s, 0 exceptions; SCADA 7 files / 84 rows in 3.21 s; dispatch, intermittent and forecast had nothing new | `AppRequests`, `customEvents` (`ingest_run`), `AppExceptions` |
 
 ## Hourly ingest on Azure Functions
